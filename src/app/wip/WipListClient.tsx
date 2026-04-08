@@ -39,6 +39,26 @@ export default function WipListClient({
   const [selectedJobIds, setSelectedJobIds] = useState<Set<number>>(new Set());
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [deletingReport, setDeletingReport] = useState<number | null>(null);
+
+  async function handleDeleteReport(id: number, periodDate: string | Date) {
+    const label = formatDate(periodDate);
+    if (!confirm(`Delete draft WIP Report for ${label}? This cannot be undone.`)) return;
+    setDeletingReport(id);
+    try {
+      const res = await fetch(`/api/wip-reports/${id}`, { method: "DELETE" });
+      if (res.ok) {
+        router.refresh();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error ?? "Failed to delete report.");
+      }
+    } catch {
+      alert("Failed to delete report.");
+    } finally {
+      setDeletingReport(null);
+    }
+  }
 
   function toggleJob(id: number) {
     setSelectedJobIds((prev) => {
@@ -132,12 +152,23 @@ export default function WipListClient({
                       {formatDate(r.created_at)}
                     </td>
                     <td className="px-4 py-2 text-center">
-                      <Link
-                        href={`/wip/${r.id}`}
-                        className="text-xs border border-[#C9A84C] text-[#C9A84C] hover:bg-[#C9A84C]/10 px-3 py-1 rounded transition-colors"
-                      >
-                        {r.status === "draft" ? "Edit" : "View"}
-                      </Link>
+                      <div className="flex gap-2 justify-center">
+                        <Link
+                          href={`/wip/${r.id}`}
+                          className="text-xs border border-[#C9A84C] text-[#C9A84C] hover:bg-[#C9A84C]/10 px-3 py-1 rounded transition-colors"
+                        >
+                          {r.status === "draft" ? "Edit" : "View"}
+                        </Link>
+                        {r.status === "draft" && (
+                          <button
+                            onClick={() => handleDeleteReport(r.id, r.period_date)}
+                            disabled={deletingReport === r.id}
+                            className="text-xs border border-red-500 text-red-400 hover:bg-red-500/10 px-3 py-1 rounded transition-colors disabled:opacity-50"
+                          >
+                            {deletingReport === r.id ? "..." : "Delete"}
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
