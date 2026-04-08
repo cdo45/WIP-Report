@@ -2,6 +2,7 @@ import sql from "@/db";
 import WipListClient from "./WipListClient";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 interface WipReport {
   id: number;
