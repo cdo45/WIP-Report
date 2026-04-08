@@ -6,10 +6,18 @@ import { useState } from "react";
 
 interface WipReport {
   id: number;
-  period_date: string;
+  period_date: string | Date;
   status: string;
-  finalized_at: string | null;
-  created_at: string;
+  finalized_at: string | Date | null;
+  created_at: string | Date;
+}
+
+// Always format as YYYY-MM-DD in UTC — avoids server/client hydration mismatch
+// from toLocaleDateString() which uses the system timezone (UTC on Vercel,
+// browser timezone on the client, producing different strings).
+function formatDate(d: string | Date | null | undefined): string {
+  if (!d) return "—";
+  return new Date(d).toISOString().slice(0, 10);
 }
 
 interface ActiveJob {
@@ -110,7 +118,7 @@ export default function WipListClient({
                     className={`${i % 2 === 0 ? "bg-[#1a3260]" : "bg-[#1F3864]"} hover:bg-[#243d70] transition-colors`}
                   >
                     <td className="px-4 py-2 font-mono">
-                      {r.period_date.slice(0, 10)}
+                      {formatDate(r.period_date)}
                     </td>
                     <td className="px-4 py-2">
                       <span className={`px-2 py-0.5 rounded text-xs font-semibold ${statusBadge(r.status)}`}>
@@ -118,12 +126,10 @@ export default function WipListClient({
                       </span>
                     </td>
                     <td className="px-4 py-2 text-gray-400">
-                      {r.finalized_at
-                        ? new Date(r.finalized_at).toLocaleDateString()
-                        : "—"}
+                      {formatDate(r.finalized_at)}
                     </td>
                     <td className="px-4 py-2 text-gray-400">
-                      {new Date(r.created_at).toLocaleDateString()}
+                      {formatDate(r.created_at)}
                     </td>
                     <td className="px-4 py-2 text-center">
                       <Link

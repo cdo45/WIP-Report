@@ -10,6 +10,10 @@ import type { LineItemWithJob, WipReport } from "./page";
 function fmt$(n: number) {
   return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
+// Safely convert any date value (string, Date, or ISO timestamp) to YYYY-MM-DD
+function toDateStr(d: string | Date): string {
+  return new Date(d).toISOString().slice(0, 10);
+}
 function fmtPct(n: number) {
   return (n * 100).toFixed(1) + "%";
 }
@@ -148,7 +152,7 @@ export default function WipEditor({
   async function handleFinalize() {
     if (
       !confirm(
-        `Finalize WIP Report for ${report.period_date.slice(0, 10)}?\n\n` +
+        `Finalize WIP Report for ${toDateStr(report.period_date)}?\n\n` +
         `This cannot be undone — all fields will become read-only.`
       )
     ) return;
@@ -200,7 +204,7 @@ export default function WipEditor({
             </Link>
             <h1 className="text-2xl font-bold">
               WIP Report{" "}
-              <span className="text-[#C9A84C]">{report.period_date.slice(0, 10)}</span>
+              <span className="text-[#C9A84C]">{toDateStr(report.period_date)}</span>
             </h1>
           </div>
           <div className="flex items-center gap-4 pt-1">
