@@ -19,31 +19,22 @@ export async function POST(request: Request) {
       job_name,
       job_type = "Fixed Fee",
       status = "Active",
-      period,
-      revised_contract = 0,
+      original_contract = 0,
+      approved_cos = 0,
       est_total_cost = 0,
-      cy_billings = 0,
-      cy_costs = 0,
-      prior_earned = 0,
-      prior_billings = 0,
-      prior_costs = 0,
-      pm_pct_override = null,
+      original_gp_pct = 0,
       notes = null,
     } = body;
 
     const [job] = await sql`
       INSERT INTO jobs (
-        job_number, job_name, job_type, status, period,
-        revised_contract, est_total_cost,
-        cy_billings, cy_costs,
-        prior_earned, prior_billings, prior_costs,
-        pm_pct_override, notes
+        job_number, job_name, job_type, status,
+        original_contract, approved_cos, est_total_cost, original_gp_pct,
+        notes
       ) VALUES (
-        ${job_number}, ${job_name}, ${job_type}, ${status}, ${period},
-        ${revised_contract}, ${est_total_cost},
-        ${cy_billings}, ${cy_costs},
-        ${prior_earned}, ${prior_billings}, ${prior_costs},
-        ${pm_pct_override}, ${notes}
+        ${job_number}, ${job_name}, ${job_type}, ${status},
+        ${original_contract}, ${approved_cos}, ${est_total_cost}, ${original_gp_pct},
+        ${notes}
       )
       RETURNING *
     `;
