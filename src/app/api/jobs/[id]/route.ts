@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import sql from "@/db";
 
 export async function GET(
@@ -57,6 +58,8 @@ export async function PUT(
       return NextResponse.json({ error: "Job not found" }, { status: 404 });
     }
 
+    revalidatePath("/jobs");
+    revalidatePath("/wip");
     return NextResponse.json(job);
   } catch (error) {
     console.error("PUT /api/jobs/[id] error:", error);
@@ -79,6 +82,8 @@ export async function DELETE(
       return NextResponse.json({ error: "Job not found" }, { status: 404 });
     }
 
+    revalidatePath("/jobs");
+    revalidatePath("/wip");
     return NextResponse.json({ deleted: true, id: job.id });
   } catch (error) {
     console.error("DELETE /api/jobs/[id] error:", error);
