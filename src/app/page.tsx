@@ -1,5 +1,6 @@
 import Link from "next/link";
 import JobsTable from "@/components/JobsTable";
+import sql from "@/db";
 
 interface Job {
   id: number;
@@ -14,18 +15,15 @@ interface Job {
   notes: string | null;
 }
 
-async function fetchJobs(): Promise<Job[]> {
-  const baseUrl =
-    process.env.NEXT_PUBLIC_BASE_URL ??
-    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
-
-  const res = await fetch(`${baseUrl}/api/jobs`, { cache: "no-store" });
-  if (!res.ok) return [];
-  return res.json();
-}
+export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
-  const jobs = await fetchJobs();
+  let jobs: Job[] = [];
+  try {
+    jobs = (await sql`SELECT * FROM jobs ORDER BY created_at DESC`) as Job[];
+  } catch (err) {
+    console.error("Failed to fetch jobs:", err);
+  }
 
   return (
     <div className="min-h-screen bg-[#1F3864] text-white px-4 py-10">
