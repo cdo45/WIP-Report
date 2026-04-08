@@ -32,14 +32,20 @@ export default function JobsTable({ jobs: initialJobs }: { jobs: Job[] }) {
   async function handleDelete(id: number) {
     if (!confirm("Delete this job? This cannot be undone.")) return;
     setDeleting(id);
-    const res = await fetch(`/api/jobs/${id}`, { method: "DELETE" });
-    if (res.ok) {
-      setJobs((prev) => prev.filter((j) => j.id !== id));
-    } else {
+    try {
+      const res = await fetch(`/api/jobs/${id}`, { method: "DELETE" });
+      if (res.ok) {
+        setJobs((prev) => prev.filter((j) => j.id !== id));
+        router.refresh();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error ?? "Failed to delete job.");
+      }
+    } catch {
       alert("Failed to delete job.");
+    } finally {
+      setDeleting(null);
     }
-    setDeleting(null);
-    router.refresh();
   }
 
   if (jobs.length === 0) {
