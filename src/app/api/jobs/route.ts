@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import sql from "@/db";
 
 export async function GET() {
@@ -39,6 +40,8 @@ export async function POST(request: Request) {
       RETURNING *
     `;
 
+    revalidatePath("/jobs");
+    revalidatePath("/wip");
     return NextResponse.json(job, { status: 201 });
   } catch (error) {
     console.error("POST /api/jobs error:", error);

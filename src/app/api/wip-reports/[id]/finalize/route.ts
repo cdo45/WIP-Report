@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import sql from "@/db";
 
 export async function POST(
@@ -29,6 +30,8 @@ export async function POST(
       WHERE report_id = ${id}
     `;
 
+    revalidatePath("/jobs");
+    revalidatePath("/wip");
     return NextResponse.json(report);
   } catch (error) {
     console.error("POST /api/wip-reports/[id]/finalize error:", error);
