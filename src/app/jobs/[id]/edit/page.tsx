@@ -1,4 +1,5 @@
 import EditJobClient from "./EditJobClient";
+import sql from "@/db";
 
 interface Job {
   id: number;
@@ -13,22 +14,19 @@ interface Job {
   notes: string | null;
 }
 
-async function fetchJob(id: string): Promise<Job | null> {
-  const baseUrl =
-    process.env.NEXT_PUBLIC_BASE_URL ??
-    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
-
-  const res = await fetch(`${baseUrl}/api/jobs/${id}`, { cache: "no-store" });
-  if (!res.ok) return null;
-  return res.json();
-}
-
 export default async function EditJobPage({
   params,
 }: {
   params: { id: string };
 }) {
-  const job = await fetchJob(params.id);
+  const id = parseInt(params.id, 10);
+  let job: Job | null = null;
+  try {
+    const [row] = await sql`SELECT * FROM jobs WHERE id = ${id}`;
+    job = (row as Job) ?? null;
+  } catch (err) {
+    console.error("Failed to fetch job:", err);
+  }
 
   if (!job) {
     return (
