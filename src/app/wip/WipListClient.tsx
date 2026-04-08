@@ -27,13 +27,14 @@ interface ActiveJob {
 }
 
 export default function WipListClient({
-  reports,
+  reports: initialReports,
   activeJobs,
 }: {
   reports: WipReport[];
   activeJobs: ActiveJob[];
 }) {
   const router = useRouter();
+  const [reports, setReports] = useState<WipReport[]>(initialReports);
   const [modalOpen, setModalOpen] = useState(false);
   const [periodDate, setPeriodDate] = useState("");
   const [selectedJobIds, setSelectedJobIds] = useState<Set<number>>(new Set());
@@ -48,6 +49,7 @@ export default function WipListClient({
     try {
       const res = await fetch(`/api/wip-reports/${id}`, { method: "DELETE" });
       if (res.ok) {
+        setReports((prev) => prev.filter((r) => r.id !== id));
         router.refresh();
       } else {
         const data = await res.json().catch(() => ({}));
