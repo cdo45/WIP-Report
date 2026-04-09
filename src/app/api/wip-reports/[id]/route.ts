@@ -18,7 +18,7 @@ export async function GET(
       SELECT
         wli.*,
         j.job_number, j.job_name, j.job_type,
-        j.original_contract, j.approved_cos, j.est_total_cost, j.original_gp_pct
+        j.original_contract, j.approved_cos, j.original_gp_pct
       FROM wip_line_items wli
       JOIN jobs j ON j.id = wli.job_id
       WHERE wli.report_id = ${id}
@@ -38,11 +38,18 @@ export async function PUT(
 ) {
   try {
     const reportId = parseInt(params.id, 10);
-    const { lineItems } = await request.json();
+    const body = await request.json();
+    const { lineItems } = body;
+
+    if (!Array.isArray(lineItems)) {
+      return NextResponse.json({ error: "lineItems must be an array" }, { status: 400 });
+    }
 
     for (const item of lineItems) {
       await sql`
         UPDATE wip_line_items SET
+          revised_contract    = ${item.revised_contract},
+          est_total_cost      = ${item.est_total_cost},
           costs_to_date       = ${item.costs_to_date},
           billings_to_date    = ${item.billings_to_date},
           pm_pct_override     = ${item.pm_pct_override ?? null},
@@ -63,7 +70,8 @@ export async function PUT(
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error("PUT /api/wip-reports/[id] error:", error);
-    return NextResponse.json({ error: "Failed to update report" }, { status: 500 });
+    const message = error instanceof Error ? error.message : String(error);
+    return NextResponse.json({ error: "Failed to update report", detail: message }, { status: 500 });
   }
 }
 

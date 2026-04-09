@@ -33,8 +33,16 @@ export async function POST(request: Request) {
       RETURNING *
     `;
 
-    // Create a line item for each job, auto-populating prior data if available
+    // Create a line item for each job
     for (const job_id of job_ids) {
+      // Get job defaults for revised_contract and est_total_cost
+      const [jobRow] = await sql`
+        SELECT original_contract + approved_cos AS revised_contract, est_total_cost
+        FROM jobs WHERE id = ${job_id}
+      `;
+
+      let revised_contract = Number(jobRow?.revised_contract ?? 0);
+      let est_total_cost = Number(jobRow?.est_total_cost ?? 0);
       let prior_year_earned = 0;
       let prior_year_billings = 0;
       let prior_year_costs = 0;
@@ -43,20 +51,17 @@ export async function POST(request: Request) {
       if (priorReport) {
         const [priorItem] = await sql`
           SELECT
-            wli.costs_to_date,
-            wli.billings_to_date,
-            wli.pm_pct_override,
-            (j.original_contract + j.approved_cos) AS revised_contract,
-            j.est_total_cost
-          FROM wip_line_items wli
-          JOIN jobs j ON j.id = wli.job_id
-          WHERE wli.report_id = ${priorReport.id}
-            AND wli.job_id = ${job_id}
+            costs_to_date, billings_to_date, pm_pct_override,
+            revised_contract, est_total_cost
+          FROM wip_line_items
+          WHERE report_id = ${priorReport.id} AND job_id = ${job_id}
         `;
 
         if (priorItem) {
-          const revisedContract = Number(priorItem.revised_contract);
-          const estTotalCost = Number(priorItem.est_total_cost);
+          // Use prior line item values, falling back to job defaults if null
+          revised_contract = Number(priorItem.revised_contract ?? revised_contract);
+          est_total_cost = Number(priorItem.est_total_cost ?? est_total_cost);
+
           const costsToDate = Number(priorItem.costs_to_date);
           const billingsToDate = Number(priorItem.billings_to_date);
           const pmOverride =
@@ -64,10 +69,10 @@ export async function POST(request: Request) {
               ? Number(priorItem.pm_pct_override)
               : null;
 
-          const pctComplete = estTotalCost > 0 ? costsToDate / estTotalCost : 0;
+          const pctComplete = est_total_cost > 0 ? costsToDate / est_total_cost : 0;
           const effectivePct = pmOverride !== null ? pmOverride : pctComplete;
           const earnedRevenue =
-            effectivePct >= 1 ? billingsToDate : effectivePct * revisedContract;
+            effectivePct >= 1 ? billingsToDate : effectivePct * revised_contract;
 
           prior_year_earned = earnedRevenue;
           prior_year_billings = billingsToDate;
@@ -79,10 +84,12 @@ export async function POST(request: Request) {
       await sql`
         INSERT INTO wip_line_items (
           report_id, job_id,
+          revised_contract, est_total_cost,
           prior_year_earned, prior_year_billings, prior_year_costs,
           is_prior_locked
         ) VALUES (
           ${report.id}, ${job_id},
+          ${revised_contract}, ${est_total_cost},
           ${prior_year_earned}, ${prior_year_billings}, ${prior_year_costs},
           ${is_prior_locked}
         )

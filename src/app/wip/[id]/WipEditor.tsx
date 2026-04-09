@@ -10,19 +10,37 @@ import type { LineItemWithJob, WipReport } from "./page";
 function fmt$(n: number) {
   return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
-// Safely convert any date value (string, Date, or ISO timestamp) to YYYY-MM-DD
 function toDateStr(d: string | Date): string {
   return new Date(d).toISOString().slice(0, 10);
 }
 function fmtPct(n: number) {
   return (n * 100).toFixed(1) + "%";
 }
+// Strip commas before parsing so comma-formatted strings round-trip correctly
 function toNum(s: string) {
-  const n = parseFloat(s);
+  const n = parseFloat(s.replace(/,/g, ""));
   return isNaN(n) ? 0 : n;
 }
+// Format a raw string as a comma-separated dollar value as the user types
+function formatDollarInput(raw: string): string {
+  const stripped = raw.replace(/[^0-9.-]/g, "");
+  if (stripped === "" || stripped === "-") return stripped;
+  const [intPart, ...decParts] = stripped.split(".");
+  const intNum = parseInt(intPart || "0", 10);
+  if (isNaN(intNum)) return stripped;
+  const formatted = intNum.toLocaleString("en-US");
+  return decParts.length > 0 ? `${formatted}.${decParts[0]}` : formatted;
+}
+
+const DOLLAR_FIELDS = new Set([
+  "revised_contract", "est_total_cost",
+  "costs_to_date", "billings_to_date",
+  "prior_year_earned", "prior_year_billings", "prior_year_costs",
+]);
 
 interface Editable {
+  revised_contract: string;
+  est_total_cost: string;
   costs_to_date: string;
   billings_to_date: string;
   pm_pct_override: string;
@@ -32,9 +50,10 @@ interface Editable {
   notes: string;
 }
 
-function calcRow(item: LineItemWithJob, e: Editable) {
-  const revisedContract = Number(item.original_contract) + Number(item.approved_cos);
-  const estTotalCost = Number(item.est_total_cost);
+// All calc logic uses editable values so Rev Contract / Est Cost edits flow live
+function calcRow(e: Editable) {
+  const revisedContract = toNum(e.revised_contract);
+  const estTotalCost = toNum(e.est_total_cost);
   const costsToDate = toNum(e.costs_to_date);
   const billingsToDate = toNum(e.billings_to_date);
   const pmStr = e.pm_pct_override.trim();
@@ -81,13 +100,15 @@ export default function WipEditor({
     const m = new Map<number, Editable>();
     for (const item of initialLineItems) {
       m.set(item.id, {
-        costs_to_date: String(item.costs_to_date ?? 0),
-        billings_to_date: String(item.billings_to_date ?? 0),
-        pm_pct_override: item.pm_pct_override != null ? String(item.pm_pct_override) : "",
-        prior_year_earned: String(item.prior_year_earned ?? 0),
-        prior_year_billings: String(item.prior_year_billings ?? 0),
-        prior_year_costs: String(item.prior_year_costs ?? 0),
-        notes: item.notes ?? "",
+        revised_contract:   formatDollarInput(String(item.revised_contract ?? 0)),
+        est_total_cost:     formatDollarInput(String(item.est_total_cost ?? 0)),
+        costs_to_date:      formatDollarInput(String(item.costs_to_date ?? 0)),
+        billings_to_date:   formatDollarInput(String(item.billings_to_date ?? 0)),
+        pm_pct_override:    item.pm_pct_override != null ? String(item.pm_pct_override) : "",
+        prior_year_earned:  formatDollarInput(String(item.prior_year_earned ?? 0)),
+        prior_year_billings:formatDollarInput(String(item.prior_year_billings ?? 0)),
+        prior_year_costs:   formatDollarInput(String(item.prior_year_costs ?? 0)),
+        notes:              item.notes ?? "",
       });
     }
     return m;
@@ -104,13 +125,15 @@ export default function WipEditor({
   function buildPayload(state: Map<number, Editable>) {
     return Array.from(state.entries()).map(([id, f]) => ({
       id,
-      costs_to_date: toNum(f.costs_to_date),
-      billings_to_date: toNum(f.billings_to_date),
-      pm_pct_override: f.pm_pct_override.trim() !== "" ? toNum(f.pm_pct_override) : null,
-      prior_year_earned: toNum(f.prior_year_earned),
+      revised_contract:    toNum(f.revised_contract),
+      est_total_cost:      toNum(f.est_total_cost),
+      costs_to_date:       toNum(f.costs_to_date),
+      billings_to_date:    toNum(f.billings_to_date),
+      pm_pct_override:     f.pm_pct_override.trim() !== "" ? toNum(f.pm_pct_override) : null,
+      prior_year_earned:   toNum(f.prior_year_earned),
       prior_year_billings: toNum(f.prior_year_billings),
-      prior_year_costs: toNum(f.prior_year_costs),
-      notes: f.notes.trim() !== "" ? f.notes : null,
+      prior_year_costs:    toNum(f.prior_year_costs),
+      notes:               f.notes.trim() !== "" ? f.notes : null,
     }));
   }
 
@@ -122,8 +145,13 @@ export default function WipEditor({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ lineItems: buildPayload(state) }),
       });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        console.error("Save failed:", data);
+      }
       setSaveStatus(res.ok ? "saved" : "error");
-    } catch {
+    } catch (err) {
+      console.error("Save error:", err);
       setSaveStatus("error");
     } finally {
       setSaving(false);
@@ -132,9 +160,10 @@ export default function WipEditor({
 
   function handleChange(itemId: number, field: keyof Editable, value: string) {
     setSaveStatus("");
+    const formatted = DOLLAR_FIELDS.has(field) ? formatDollarInput(value) : value;
     setEditState((prev) => {
       const next = new Map(prev);
-      next.set(itemId, { ...prev.get(itemId)!, [field]: value });
+      next.set(itemId, { ...prev.get(itemId)!, [field]: formatted });
       if (saveTimer.current) clearTimeout(saveTimer.current);
       saveTimer.current = setTimeout(() => doSave(next), 1000);
       return next;
@@ -169,11 +198,11 @@ export default function WipEditor({
     }
   }
 
-  // Compute all rows
+  // Compute all rows — uses editState so calcs are live
   const computed = initialLineItems.map((item) => ({
     item,
     editable: editState.get(item.id)!,
-    ...calcRow(item, editState.get(item.id)!),
+    ...calcRow(editState.get(item.id)!),
   }));
 
   // Summary totals
@@ -234,11 +263,11 @@ export default function WipEditor({
               <tr>
                 <th className={`${th} sticky left-0 z-20 w-[72px]`}>Job #</th>
                 <th className={`${th} sticky left-[72px] z-20 min-w-[150px]`}>Job Name</th>
-                <th className={`${th} text-right min-w-[120px]`}>Rev Contract</th>
-                <th className={`${th} text-right min-w-[110px]`}>Est Cost</th>
+                <th className={`${th} text-right min-w-[130px]`}>Rev Contract</th>
+                <th className={`${th} text-right min-w-[120px]`}>Est Cost</th>
                 <th className={`${th} text-right min-w-[72px]`}>Est GP%</th>
-                <th className={`${th} text-right min-w-[120px]`}>Costs ITD</th>
-                <th className={`${th} text-right min-w-[120px]`}>Billings ITD</th>
+                <th className={`${th} text-right min-w-[130px]`}>Costs ITD</th>
+                <th className={`${th} text-right min-w-[130px]`}>Billings ITD</th>
                 <th className={`${th} text-right min-w-[72px]`}>% Comp</th>
                 <th className={`${th} text-right min-w-[100px]`}>PM% Ovrd</th>
                 <th className={`${th} text-right min-w-[72px]`}>Eff %</th>
@@ -283,9 +312,35 @@ export default function WipEditor({
                           {item.job_name}
                         </td>
 
-                        {/* Read-only job fields */}
-                        <td className={td}>${fmt$(revisedContract)}</td>
-                        <td className={td}>${fmt$(estTotalCost)}</td>
+                        {/* Editable: Rev Contract */}
+                        <td className="px-1 py-0.5 whitespace-nowrap">
+                          {isFinalized ? (
+                            <span className={td}>${fmt$(revisedContract)}</span>
+                          ) : (
+                            <input
+                              type="text"
+                              value={editable.revised_contract}
+                              onChange={(e) => handleChange(item.id, "revised_contract", e.target.value)}
+                              className={inp}
+                            />
+                          )}
+                        </td>
+
+                        {/* Editable: Est Cost */}
+                        <td className="px-1 py-0.5 whitespace-nowrap">
+                          {isFinalized ? (
+                            <span className={td}>${fmt$(estTotalCost)}</span>
+                          ) : (
+                            <input
+                              type="text"
+                              value={editable.est_total_cost}
+                              onChange={(e) => handleChange(item.id, "est_total_cost", e.target.value)}
+                              className={inp}
+                            />
+                          )}
+                        </td>
+
+                        {/* Calc: Est GP% */}
                         <td className={td}>{fmtPct(estGpPct)}</td>
 
                         {/* Editable: Costs ITD */}
@@ -294,7 +349,7 @@ export default function WipEditor({
                             <span className={td}>${fmt$(toNum(editable.costs_to_date))}</span>
                           ) : (
                             <input
-                              type="number" step="0.01"
+                              type="text"
                               value={editable.costs_to_date}
                               onChange={(e) => handleChange(item.id, "costs_to_date", e.target.value)}
                               className={inp}
@@ -308,7 +363,7 @@ export default function WipEditor({
                             <span className={td}>${fmt$(toNum(editable.billings_to_date))}</span>
                           ) : (
                             <input
-                              type="number" step="0.01"
+                              type="text"
                               value={editable.billings_to_date}
                               onChange={(e) => handleChange(item.id, "billings_to_date", e.target.value)}
                               className={inp}
@@ -404,7 +459,7 @@ export default function WipEditor({
                                     </span>
                                   ) : (
                                     <input
-                                      type="number" step="0.01"
+                                      type="text"
                                       value={editable[field]}
                                       onChange={(e) => handleChange(item.id, field, e.target.value)}
                                       className="w-36 bg-[#162a50] border border-[#2e4a7a] text-white rounded px-2 py-1 text-xs focus:outline-none focus:border-[#C9A84C] text-right"

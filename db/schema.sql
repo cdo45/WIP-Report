@@ -26,6 +26,8 @@ CREATE TABLE IF NOT EXISTS wip_line_items (
   id SERIAL PRIMARY KEY,
   report_id INTEGER NOT NULL REFERENCES wip_reports(id) ON DELETE CASCADE,
   job_id INTEGER NOT NULL REFERENCES jobs(id),
+  revised_contract NUMERIC DEFAULT 0,
+  est_total_cost NUMERIC DEFAULT 0,
   costs_to_date NUMERIC DEFAULT 0,
   billings_to_date NUMERIC DEFAULT 0,
   pm_pct_override NUMERIC,
