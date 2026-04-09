@@ -66,13 +66,29 @@ export async function PUT(
       return NextResponse.json({ error: "lineItems must be an array" }, { status: 400 });
     }
 
+    console.log(`PUT /api/wip-reports/${reportId} — saving ${lineItems.length} line items`);
+
     for (const item of lineItems as Record<string, unknown>[]) {
-      // Main fields — try with new columns first, fall back without them
-      // so save still works if revised_contract/est_total_cost haven't been
-      // migrated to the live DB yet.
+      const params = {
+        id: item.id,
+        report_id: reportId,
+        revised_contract: item.revised_contract,
+        est_total_cost: item.est_total_cost,
+        costs_to_date: item.costs_to_date,
+        billings_to_date: item.billings_to_date,
+        pm_pct_override: item.pm_pct_override ?? null,
+        notes: item.notes ?? null,
+        prior_year_earned: item.prior_year_earned,
+        prior_year_billings: item.prior_year_billings,
+        prior_year_costs: item.prior_year_costs,
+      };
+      console.log("UPDATE params:", JSON.stringify(params));
+
+      // Main fields — try with revised_contract/est_total_cost first,
+      // fall back without them if the columns haven't been migrated yet.
       let mainSaved = false;
       try {
-        await sql`
+        const updated = await sql`
           UPDATE wip_line_items SET
             revised_contract = ${item.revised_contract as number},
             est_total_cost   = ${item.est_total_cost as number},
@@ -82,18 +98,25 @@ export async function PUT(
             notes            = ${(item.notes ?? null) as string | null},
             updated_at       = NOW()
           WHERE id = ${item.id as number} AND report_id = ${reportId}
+          RETURNING id, costs_to_date, billings_to_date
         `;
-        mainSaved = true;
+        if (updated.length === 0) {
+          console.warn(`Main UPDATE matched 0 rows for item id=${item.id} report_id=${reportId}`);
+          errors.push(`item ${item.id} main: 0 rows matched — id or report_id mismatch`);
+        } else {
+          console.log(`Main UPDATE ok — row after write:`, JSON.stringify(updated[0]));
+          mainSaved = true;
+        }
       } catch (e) {
         const msg = serializeError(e);
         console.error(`Main UPDATE failed for item ${item.id}:`, msg);
         errors.push(`item ${item.id} main: ${msg}`);
       }
 
-      // Fallback: save core fields without new columns
+      // Fallback: save core fields without the new columns
       if (!mainSaved) {
         try {
-          await sql`
+          const updated = await sql`
             UPDATE wip_line_items SET
               costs_to_date    = ${item.costs_to_date as number},
               billings_to_date = ${item.billings_to_date as number},
@@ -101,7 +124,14 @@ export async function PUT(
               notes            = ${(item.notes ?? null) as string | null},
               updated_at       = NOW()
             WHERE id = ${item.id as number} AND report_id = ${reportId}
+            RETURNING id, costs_to_date, billings_to_date
           `;
+          if (updated.length === 0) {
+            console.warn(`Fallback UPDATE matched 0 rows for item id=${item.id} report_id=${reportId}`);
+            errors.push(`item ${item.id} fallback: 0 rows matched`);
+          } else {
+            console.log(`Fallback UPDATE ok — row after write:`, JSON.stringify(updated[0]));
+          }
         } catch (e) {
           const msg = serializeError(e);
           console.error(`Fallback UPDATE failed for item ${item.id}:`, msg);
@@ -109,7 +139,7 @@ export async function PUT(
         }
       }
 
-      // Prior year fields — separate query so is_prior_locked rows are simply unmatched
+      // Prior year — separate query; rows with is_prior_locked=true simply don't match
       try {
         await sql`
           UPDATE wip_line_items SET
@@ -129,8 +159,11 @@ export async function PUT(
     revalidatePath("/wip");
 
     if (errors.length > 0) {
+      console.error(`PUT /api/wip-reports/${reportId} completed with errors:`, errors);
       return NextResponse.json({ ok: false, errors }, { status: 207 });
     }
+
+    console.log(`PUT /api/wip-reports/${reportId} — all items saved successfully`);
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error("PUT /api/wip-reports/[id] unhandled error:", error);

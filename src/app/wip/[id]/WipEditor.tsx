@@ -151,11 +151,13 @@ export default function WipEditor({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ lineItems: buildPayload(state) }),
       });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
+      const data = await res.json().catch(() => ({}));
+      // 207 = partial save (some rows had errors) — treat as failure
+      const success = res.ok && data.ok !== false;
+      if (!success) {
         console.error("Save failed:", data);
       }
-      setSaveStatus(res.ok ? "saved" : "error");
+      setSaveStatus(success ? "saved" : "error");
     } catch (err) {
       console.error("Save error:", err);
       setSaveStatus("error");
