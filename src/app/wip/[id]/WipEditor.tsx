@@ -96,10 +96,9 @@ export default function WipEditor({
   const router = useRouter();
   const isFinalized = report.status === "final";
 
-  // JS sort — does not rely on server ORDER BY or SQL collation
-  const sortedItems = [...initialLineItems].sort((a, b) =>
-    a.job_number.localeCompare(b.job_number, undefined, { numeric: true })
-  );
+  // Keep a stable copy of initialLineItems for Map keying and computed.
+  // Render order is determined solely by sortedForRender below.
+  const sortedItems = [...initialLineItems];
 
   const [editState, setEditState] = useState<Map<number, Editable>>(() => {
     const m = new Map<number, Editable>();
