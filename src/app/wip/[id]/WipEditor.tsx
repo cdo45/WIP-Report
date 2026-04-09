@@ -62,7 +62,9 @@ function calcRow(e: Editable) {
   const estGpPct = revisedContract > 0 ? (revisedContract - estTotalCost) / revisedContract : 0;
   const pctComplete = estTotalCost > 0 ? costsToDate / estTotalCost : 0;
   const effectivePct = pmOverride !== null ? pmOverride : pctComplete;
-  const earnedRevenue = effectivePct >= 1 ? billingsToDate : effectivePct * revisedContract;
+  const earnedRevenue = effectivePct >= 1
+    ? Math.max(billingsToDate, revisedContract)
+    : effectivePct * revisedContract;
   const overUnder = earnedRevenue - billingsToDate;
   const itdGp = earnedRevenue - costsToDate;
   const itdGpPct = earnedRevenue !== 0 ? itdGp / earnedRevenue : 0;
