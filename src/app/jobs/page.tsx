@@ -21,10 +21,13 @@ export default async function JobsPage() {
   let jobs: Job[] = [];
   try {
     const rows = (await sql`SELECT * FROM jobs`) as Job[];
-    // JS sort — does not rely on DB collation or SQL ORDER BY
-    jobs = [...rows].sort((a, b) =>
-      a.job_number.localeCompare(b.job_number, undefined, { numeric: true })
-    );
+    // Numeric dash-split sort: 2024-07 < 2025-01 < 2025-05
+    jobs = [...rows].sort((a, b) => {
+      const aParts = a.job_number.split("-").map(Number);
+      const bParts = b.job_number.split("-").map(Number);
+      if (aParts[0] !== bParts[0]) return aParts[0] - bParts[0];
+      return (aParts[1] ?? 0) - (bParts[1] ?? 0);
+    });
   } catch (err) {
     console.error("Failed to fetch jobs:", err);
   }

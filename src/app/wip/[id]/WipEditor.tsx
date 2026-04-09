@@ -226,6 +226,14 @@ export default function WipEditor({
   const inp = "w-full bg-[#162a50] border border-[#2e4a7a] text-white text-right rounded px-2 py-0.5 text-xs focus:outline-none focus:border-[#C9A84C]";
   const COLS = 20;
 
+  // Final render sort — numeric dash-split: 2024-07 < 2025-01 < 2025-05
+  const sortedForRender = [...computed].sort((a, b) => {
+    const aParts = a.item.job_number.split("-").map(Number);
+    const bParts = b.item.job_number.split("-").map(Number);
+    if (aParts[0] !== bParts[0]) return aParts[0] - bParts[0];
+    return (aParts[1] ?? 0) - (bParts[1] ?? 0);
+  });
+
   return (
     <div className="px-4 py-6">
       <div className="max-w-screen-2xl mx-auto">
@@ -289,7 +297,7 @@ export default function WipEditor({
               </tr>
             </thead>
             <tbody>
-              {computed.map(
+              {sortedForRender.map(
                 (
                   {
                     item, editable,
