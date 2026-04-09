@@ -26,10 +26,39 @@ export async function POST(request: Request) {
       LIMIT 1
     `;
 
+    // Auto-populate GL balances from prior report's calculated should-be values
+    let prior_balance_1290 = 0;
+    let prior_balance_2030 = 0;
+    if (priorReport) {
+      const priorItems = await sql`
+        SELECT revised_contract, est_total_cost, costs_to_date, billings_to_date, pm_pct_override
+        FROM wip_line_items WHERE report_id = ${priorReport.id}
+      `;
+      let totalUnderbillings = 0;
+      let totalOverbillings  = 0;
+      for (const li of priorItems) {
+        const revisedContract = Number(li.revised_contract);
+        const estTotalCost    = Number(li.est_total_cost);
+        const costsToDate     = Number(li.costs_to_date);
+        const billingsToDate  = Number(li.billings_to_date);
+        const pmOverride      = li.pm_pct_override != null ? Number(li.pm_pct_override) : null;
+        const pctComplete     = estTotalCost > 0 ? costsToDate / estTotalCost : 0;
+        const effectivePct    = pmOverride !== null ? pmOverride : pctComplete;
+        const earnedRevenue   = effectivePct >= 1
+          ? Math.max(billingsToDate, revisedContract)
+          : effectivePct * revisedContract;
+        const overUnder = earnedRevenue - billingsToDate;
+        if (overUnder > 0) totalUnderbillings += overUnder;
+        else               totalOverbillings  += -overUnder;
+      }
+      prior_balance_1290 = totalUnderbillings;
+      prior_balance_2030 = -totalOverbillings;
+    }
+
     // Create the report record
     const [report] = await sql`
-      INSERT INTO wip_reports (period_date, status)
-      VALUES (${period_date}, 'draft')
+      INSERT INTO wip_reports (period_date, status, prior_balance_1290, prior_balance_2030)
+      VALUES (${period_date}, 'draft', ${prior_balance_1290}, ${prior_balance_2030})
       RETURNING *
     `;
 

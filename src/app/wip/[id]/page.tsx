@@ -9,6 +9,8 @@ export interface WipReport {
   period_date: string;
   status: string;
   finalized_at: string | null;
+  prior_balance_1290: number;
+  prior_balance_2030: number;
 }
 
 export interface LineItemWithJob {
