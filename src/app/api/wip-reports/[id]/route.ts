@@ -22,7 +22,7 @@ export async function GET(
       FROM wip_line_items wli
       JOIN jobs j ON j.id = wli.job_id
       WHERE wli.report_id = ${id}
-      ORDER BY j.job_number
+      ORDER BY j.job_number ASC
     `;
 
     return NextResponse.json({ report, lineItems });
@@ -46,22 +46,27 @@ export async function PUT(
     }
 
     for (const item of lineItems) {
+      // Update all non-prior-year fields unconditionally
       await sql`
         UPDATE wip_line_items SET
-          revised_contract    = ${item.revised_contract},
-          est_total_cost      = ${item.est_total_cost},
-          costs_to_date       = ${item.costs_to_date},
-          billings_to_date    = ${item.billings_to_date},
-          pm_pct_override     = ${item.pm_pct_override ?? null},
-          notes               = ${item.notes ?? null},
-          prior_year_earned   = CASE WHEN is_prior_locked THEN prior_year_earned
-                                     ELSE ${item.prior_year_earned} END,
-          prior_year_billings = CASE WHEN is_prior_locked THEN prior_year_billings
-                                     ELSE ${item.prior_year_billings} END,
-          prior_year_costs    = CASE WHEN is_prior_locked THEN prior_year_costs
-                                     ELSE ${item.prior_year_costs} END,
-          updated_at          = NOW()
+          revised_contract = ${item.revised_contract},
+          est_total_cost   = ${item.est_total_cost},
+          costs_to_date    = ${item.costs_to_date},
+          billings_to_date = ${item.billings_to_date},
+          pm_pct_override  = ${item.pm_pct_override ?? null},
+          notes            = ${item.notes ?? null},
+          updated_at       = NOW()
         WHERE id = ${item.id} AND report_id = ${reportId}
+      `;
+
+      // Update prior year fields only when not locked — avoids CASE WHEN
+      // parameter embedding which some Neon driver versions mishandle
+      await sql`
+        UPDATE wip_line_items SET
+          prior_year_earned   = ${item.prior_year_earned},
+          prior_year_billings = ${item.prior_year_billings},
+          prior_year_costs    = ${item.prior_year_costs}
+        WHERE id = ${item.id} AND report_id = ${reportId} AND is_prior_locked = false
       `;
     }
 
