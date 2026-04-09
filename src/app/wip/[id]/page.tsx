@@ -1,6 +1,9 @@
 import sql from "@/db";
 import WipEditor from "./WipEditor";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export interface WipReport {
   id: number;
   period_date: string;
