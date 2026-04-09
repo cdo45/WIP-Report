@@ -20,7 +20,7 @@ export const dynamic = "force-dynamic";
 export default async function JobsPage() {
   let jobs: Job[] = [];
   try {
-    jobs = (await sql`SELECT * FROM jobs ORDER BY created_at DESC`) as Job[];
+    jobs = (await sql`SELECT * FROM jobs ORDER BY job_number ASC`) as Job[];
   } catch (err) {
     console.error("Failed to fetch jobs:", err);
   }
