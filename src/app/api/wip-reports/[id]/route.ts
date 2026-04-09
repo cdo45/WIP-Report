@@ -95,8 +95,7 @@ export async function PUT(
             costs_to_date    = ${item.costs_to_date as number},
             billings_to_date = ${item.billings_to_date as number},
             pm_pct_override  = ${(item.pm_pct_override ?? null) as number | null},
-            notes            = ${(item.notes ?? null) as string | null},
-            updated_at       = NOW()
+            notes            = ${(item.notes ?? null) as string | null}
           WHERE id = ${item.id as number} AND report_id = ${reportId}
           RETURNING id, costs_to_date, billings_to_date
         `;
@@ -121,8 +120,7 @@ export async function PUT(
               costs_to_date    = ${item.costs_to_date as number},
               billings_to_date = ${item.billings_to_date as number},
               pm_pct_override  = ${(item.pm_pct_override ?? null) as number | null},
-              notes            = ${(item.notes ?? null) as string | null},
-              updated_at       = NOW()
+              notes            = ${(item.notes ?? null) as string | null}
             WHERE id = ${item.id as number} AND report_id = ${reportId}
             RETURNING id, costs_to_date, billings_to_date
           `;
