@@ -20,7 +20,11 @@ export const dynamic = "force-dynamic";
 export default async function JobsPage() {
   let jobs: Job[] = [];
   try {
-    jobs = (await sql`SELECT * FROM jobs ORDER BY job_number ASC`) as Job[];
+    const rows = (await sql`SELECT * FROM jobs`) as Job[];
+    // JS sort — does not rely on DB collation or SQL ORDER BY
+    jobs = [...rows].sort((a, b) =>
+      a.job_number.localeCompare(b.job_number, undefined, { numeric: true })
+    );
   } catch (err) {
     console.error("Failed to fetch jobs:", err);
   }

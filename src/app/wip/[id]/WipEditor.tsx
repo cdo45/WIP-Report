@@ -96,9 +96,14 @@ export default function WipEditor({
   const router = useRouter();
   const isFinalized = report.status === "final";
 
+  // JS sort — does not rely on server ORDER BY or SQL collation
+  const sortedItems = [...initialLineItems].sort((a, b) =>
+    a.job_number.localeCompare(b.job_number, undefined, { numeric: true })
+  );
+
   const [editState, setEditState] = useState<Map<number, Editable>>(() => {
     const m = new Map<number, Editable>();
-    for (const item of initialLineItems) {
+    for (const item of sortedItems) {
       m.set(item.id, {
         revised_contract:   formatDollarInput(String(item.revised_contract ?? 0)),
         est_total_cost:     formatDollarInput(String(item.est_total_cost ?? 0)),
@@ -199,7 +204,7 @@ export default function WipEditor({
   }
 
   // Compute all rows — uses editState so calcs are live
-  const computed = initialLineItems.map((item) => ({
+  const computed = sortedItems.map((item) => ({
     item,
     editable: editState.get(item.id)!,
     ...calcRow(editState.get(item.id)!),
