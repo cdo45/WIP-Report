@@ -14,7 +14,7 @@ function toDateStr(d: string | Date): string {
   return new Date(d).toISOString().slice(0, 10);
 }
 function fmtPct(n: number) {
-  return (n * 100).toFixed(1) + "%";
+  return (n * 100).toFixed(2) + "%";
 }
 // Strip commas before parsing so comma-formatted strings round-trip correctly
 function toNum(s: string) {
