@@ -60,13 +60,32 @@ export async function PUT(
       );
     }
 
-    const { lineItems } = body as { lineItems?: unknown[] };
+    const { lineItems, prior_balance_1290, prior_balance_2030 } = body as {
+      lineItems?: unknown[];
+      prior_balance_1290?: number;
+      prior_balance_2030?: number;
+    };
 
     if (!Array.isArray(lineItems)) {
       return NextResponse.json({ error: "lineItems must be an array" }, { status: 400 });
     }
 
     console.log(`PUT /api/wip-reports/${reportId} — saving ${lineItems.length} line items`);
+
+    // Save GL balance fields on wip_reports
+    try {
+      await sql`
+        UPDATE wip_reports SET
+          prior_balance_1290 = ${(prior_balance_1290 ?? 0) as number},
+          prior_balance_2030 = ${(prior_balance_2030 ?? 0) as number},
+          updated_at         = NOW()
+        WHERE id = ${reportId}
+      `;
+    } catch (e) {
+      const msg = serializeError(e);
+      console.error(`GL balance UPDATE failed for report ${reportId}:`, msg);
+      errors.push(`report gl balances: ${msg}`);
+    }
 
     for (const item of lineItems as Record<string, unknown>[]) {
       const params = {

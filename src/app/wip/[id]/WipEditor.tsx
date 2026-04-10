@@ -120,6 +120,11 @@ export default function WipEditor({
     return m;
   });
 
+  const gl1290Ref = useRef(formatDollarInput(String(report.prior_balance_1290 ?? 0)));
+  const gl2030Ref = useRef(formatDollarInput(String(report.prior_balance_2030 ?? 0)));
+  const [gl1290Str, setGl1290Str] = useState(gl1290Ref.current);
+  const [gl2030Str, setGl2030Str] = useState(gl2030Ref.current);
+
   const [expandedPrior, setExpandedPrior] = useState<Set<number>>(new Set());
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<"" | "saved" | "error">("");
@@ -149,7 +154,11 @@ export default function WipEditor({
       const res = await fetch(`/api/wip-reports/${report.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ lineItems: buildPayload(state) }),
+        body: JSON.stringify({
+          lineItems: buildPayload(state),
+          prior_balance_1290: toNum(gl1290Ref.current),
+          prior_balance_2030: toNum(gl2030Ref.current),
+        }),
       });
       const data = await res.json().catch(() => ({}));
       // 207 = partial save (some rows had errors) — treat as failure
@@ -176,6 +185,20 @@ export default function WipEditor({
       saveTimer.current = setTimeout(() => doSave(next), 1000);
       return next;
     });
+  }
+
+  function handleGlChange(field: "1290" | "2030", value: string) {
+    setSaveStatus("");
+    const formatted = formatDollarInput(value);
+    if (field === "1290") {
+      setGl1290Str(formatted);
+      gl1290Ref.current = formatted;
+    } else {
+      setGl2030Str(formatted);
+      gl2030Ref.current = formatted;
+    }
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => doSave(editState), 1000);
   }
 
   function togglePrior(itemId: number) {
@@ -221,6 +244,16 @@ export default function WipEditor({
   const totalCyRevenue     = computed.reduce((s, r) => s + r.cyEarned, 0);
   const totalCyCosts       = computed.reduce((s, r) => s + r.cyCosts, 0);
   const totalCyGp          = totalCyRevenue - totalCyCosts;
+
+  // GL reconciliation values
+  const gl1290Num = toNum(gl1290Str);
+  const gl2030Num = toNum(gl2030Str);
+  // adj = should_be - current_balance
+  // 1290 should-be = totalUnderbillings (positive asset)
+  // 2030 should-be = -totalOverbillings (negative liability)
+  const adj1290 = totalUnderbillings - gl1290Num;
+  const adj2030 = -totalOverbillings - gl2030Num;
+  const netAdj  = adj1290 + adj2030;
 
   // ── Styles ────────────────────────────────────────────────────────────────
   const th = "px-2 py-2.5 text-left text-xs font-semibold whitespace-nowrap text-[#C9A84C] bg-[#0f1e38]";
@@ -551,48 +584,160 @@ export default function WipEditor({
         </div>
 
         {/* ── Journal entry ──────────────────────────────────────────────── */}
-        <div className="bg-[#162a50] rounded-lg border border-[#2e4a7a] p-5 mb-8">
+        <div className="bg-[#162a50] rounded-lg border border-[#2e4a7a] p-5 mb-6">
           <h2 className="text-[#C9A84C] font-semibold mb-4">Auto-Generated Journal Entry</h2>
+
+          {/* Reconciliation table */}
+          <div className="overflow-x-auto mb-5">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-[#2e4a7a]">
+                  <th className="text-left py-2 pr-6 text-gray-400 font-semibold">Account</th>
+                  <th className="text-right py-2 px-4 text-gray-400 font-semibold">Current Balance</th>
+                  <th className="text-right py-2 px-4 text-gray-400 font-semibold">Should Be</th>
+                  <th className="text-right py-2 pl-4 text-gray-400 font-semibold">Adjustment</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#243d70]">
+                <tr>
+                  <td className="py-2 pr-6 text-gray-300">1290 Costs in Excess</td>
+                  <td className="py-2 px-4 text-right font-mono text-gray-200">${fmt$(gl1290Num)}</td>
+                  <td className="py-2 px-4 text-right font-mono text-green-400">${fmt$(totalUnderbillings)}</td>
+                  <td className={`py-2 pl-4 text-right font-mono font-semibold ${adj1290 >= 0 ? "text-green-400" : "text-red-400"}`}>
+                    {adj1290 >= 0 ? "+" : "-"}${fmt$(Math.abs(adj1290))}
+                  </td>
+                </tr>
+                <tr>
+                  <td className="py-2 pr-6 text-gray-300">2030 Billings in Excess</td>
+                  <td className="py-2 px-4 text-right font-mono text-gray-200">
+                    {gl2030Num < 0 ? "-" : ""}${fmt$(Math.abs(gl2030Num))}
+                  </td>
+                  <td className="py-2 px-4 text-right font-mono text-red-400">-${fmt$(totalOverbillings)}</td>
+                  <td className={`py-2 pl-4 text-right font-mono font-semibold ${adj2030 >= 0 ? "text-green-400" : "text-red-400"}`}>
+                    {adj2030 >= 0 ? "+" : "-"}${fmt$(Math.abs(adj2030))}
+                  </td>
+                </tr>
+                <tr className="border-t-2 border-[#2e4a7a]">
+                  <td className="py-2 pr-6 text-gray-300">401510 WIP Revenue</td>
+                  <td className="py-2 px-4 text-right font-mono text-gray-500">—</td>
+                  <td className="py-2 px-4 text-right font-mono text-gray-500">—</td>
+                  <td className={`py-2 pl-4 text-right font-mono font-bold ${netAdj >= 0 ? "text-green-400" : "text-red-400"}`}>
+                    {netAdj >= 0 ? "+" : "-"}${fmt$(Math.abs(netAdj))}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          {/* JE entries */}
           <div className="font-mono text-sm space-y-1">
-            {totalUnderbillings > 0 && (
+            {adj1290 > 0 && (
               <>
                 <div className="flex gap-6">
                   <span className="text-gray-400 w-6">DR</span>
                   <span className="flex-1">1290 Costs in Excess of Billings</span>
-                  <span className="text-green-400">${fmt$(totalUnderbillings)}</span>
+                  <span className="text-green-400">${fmt$(adj1290)}</span>
                 </div>
                 <div className="flex gap-6">
                   <span className="text-gray-400 w-6">CR</span>
                   <span className="flex-1">401510 WIP Revenue Recognized</span>
-                  <span className="text-green-400">${fmt$(totalUnderbillings)}</span>
+                  <span className="text-green-400">${fmt$(adj1290)}</span>
                 </div>
               </>
             )}
-            {totalOverbillings > 0 && (
+            {adj1290 < 0 && (
               <>
-                <div className="flex gap-6 mt-2">
+                <div className="flex gap-6">
                   <span className="text-gray-400 w-6">DR</span>
                   <span className="flex-1">401510 WIP Revenue Recognized</span>
-                  <span className="text-red-400">${fmt$(totalOverbillings)}</span>
+                  <span className="text-red-400">${fmt$(Math.abs(adj1290))}</span>
+                </div>
+                <div className="flex gap-6">
+                  <span className="text-gray-400 w-6">CR</span>
+                  <span className="flex-1">1290 Costs in Excess of Billings</span>
+                  <span className="text-red-400">${fmt$(Math.abs(adj1290))}</span>
+                </div>
+              </>
+            )}
+            {adj2030 > 0 && (
+              <>
+                <div className={`flex gap-6${adj1290 !== 0 ? " mt-2" : ""}`}>
+                  <span className="text-gray-400 w-6">DR</span>
+                  <span className="flex-1">2030 Billings in Excess of Costs</span>
+                  <span className="text-green-400">${fmt$(adj2030)}</span>
+                </div>
+                <div className="flex gap-6">
+                  <span className="text-gray-400 w-6">CR</span>
+                  <span className="flex-1">401510 WIP Revenue Recognized</span>
+                  <span className="text-green-400">${fmt$(adj2030)}</span>
+                </div>
+              </>
+            )}
+            {adj2030 < 0 && (
+              <>
+                <div className={`flex gap-6${adj1290 !== 0 ? " mt-2" : ""}`}>
+                  <span className="text-gray-400 w-6">DR</span>
+                  <span className="flex-1">401510 WIP Revenue Recognized</span>
+                  <span className="text-red-400">${fmt$(Math.abs(adj2030))}</span>
                 </div>
                 <div className="flex gap-6">
                   <span className="text-gray-400 w-6">CR</span>
                   <span className="flex-1">2030 Billings in Excess of Costs</span>
-                  <span className="text-red-400">${fmt$(totalOverbillings)}</span>
+                  <span className="text-red-400">${fmt$(Math.abs(adj2030))}</span>
                 </div>
               </>
             )}
-            {totalUnderbillings === 0 && totalOverbillings === 0 && (
-              <span className="text-gray-500 italic">No adjustments needed — no jobs entered yet.</span>
+            {adj1290 === 0 && adj2030 === 0 && (
+              <span className="text-gray-500 italic">No adjustments needed.</span>
             )}
             <div className="flex gap-6 border-t border-[#2e4a7a] pt-2 mt-2">
               <span className="text-gray-500 w-6" />
-              <span className="text-gray-400 flex-1">Net P&amp;L Impact (Underbilled − Overbilled)</span>
-              <span className={netOverUnder >= 0 ? "text-green-400" : "text-red-400"}>
-                {netOverUnder >= 0 ? "+" : ""}${fmt$(netOverUnder)}
+              <span className="text-gray-400 flex-1">Net P&amp;L Impact</span>
+              <span className={netAdj >= 0 ? "text-green-400" : "text-red-400"}>
+                {netAdj >= 0 ? "+" : "-"}${fmt$(Math.abs(netAdj))}
               </span>
             </div>
           </div>
+        </div>
+
+        {/* ── GL Reconciliation ──────────────────────────────────────────── */}
+        <div className="bg-[#162a50] rounded-lg border border-[#2e4a7a] p-5 mb-8">
+          <h2 className="text-[#C9A84C] font-semibold mb-4">GL Reconciliation</h2>
+          <div className="flex flex-wrap gap-8">
+            <div>
+              <div className="text-xs text-gray-400 mb-1.5">Current GL Balance — 1290 Costs in Excess</div>
+              {isFinalized ? (
+                <span className="text-sm font-mono text-gray-200">${fmt$(gl1290Num)}</span>
+              ) : (
+                <input
+                  type="text"
+                  value={gl1290Str}
+                  onChange={(e) => handleGlChange("1290", e.target.value)}
+                  className="w-48 bg-[#0f1e38] border border-[#2e4a7a] text-white rounded px-3 py-1.5 text-sm focus:outline-none focus:border-[#C9A84C] text-right"
+                />
+              )}
+            </div>
+            <div>
+              <div className="text-xs text-gray-400 mb-1.5">Current GL Balance — 2030 Billings in Excess</div>
+              {isFinalized ? (
+                <span className="text-sm font-mono text-gray-200">
+                  {gl2030Num < 0 ? "-" : ""}${fmt$(Math.abs(gl2030Num))}
+                </span>
+              ) : (
+                <input
+                  type="text"
+                  value={gl2030Str}
+                  onChange={(e) => handleGlChange("2030", e.target.value)}
+                  className="w-48 bg-[#0f1e38] border border-[#2e4a7a] text-white rounded px-3 py-1.5 text-sm focus:outline-none focus:border-[#C9A84C] text-right"
+                />
+              )}
+            </div>
+          </div>
+          {!isFinalized && (
+            <p className="text-xs text-gray-500 mt-3">
+              Enter the current GL balance for each account. For 2030 (credit/liability), enter a negative value (e.g., -12,500.00).
+            </p>
+          )}
         </div>
 
         {/* ── Bottom finalize ────────────────────────────────────────────── */}

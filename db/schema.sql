@@ -18,6 +18,8 @@ CREATE TABLE IF NOT EXISTS wip_reports (
   period_date DATE NOT NULL,
   status TEXT DEFAULT 'draft',
   finalized_at TIMESTAMP,
+  prior_balance_1290 NUMERIC DEFAULT 0,
+  prior_balance_2030 NUMERIC DEFAULT 0,
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW()
 );
