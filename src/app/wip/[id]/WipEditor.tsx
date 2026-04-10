@@ -839,6 +839,12 @@ ${fadedJobs.length > 0 ? `
             {saving && <span className="text-xs text-[#6B7280]">Saving…</span>}
             {!saving && saveStatus === "saved"  && <span className="text-xs text-[#16A34A]">Saved</span>}
             {!saving && saveStatus === "error"  && <span className="text-xs text-[#B22234]">Save failed</span>}
+            <Link
+              href={`/wip/${report.id}/summary`}
+              className="border border-[#E5E7EB] text-[#6B7280] hover:border-[#1B2A4A] hover:text-[#1B2A4A] px-4 py-2 rounded text-sm font-medium transition-colors"
+            >
+              Summary
+            </Link>
             <button
               onClick={handlePrint}
               className="border border-[#E5E7EB] text-[#6B7280] hover:border-[#1B2A4A] hover:text-[#1B2A4A] px-4 py-2 rounded text-sm font-medium transition-colors"
@@ -1392,6 +1398,12 @@ ${fadedJobs.length > 0 ? `
 
         {/* ── Bottom actions ─────────────────────────────────────────────── */}
         <div className="flex justify-end gap-3 mb-8">
+          <Link
+            href={`/wip/${report.id}/summary`}
+            className="border border-[#E5E7EB] text-[#6B7280] hover:border-[#1B2A4A] hover:text-[#1B2A4A] px-5 py-2.5 rounded text-sm font-medium transition-colors"
+          >
+            Summary
+          </Link>
           <button
             onClick={handlePrint}
             className="border border-[#E5E7EB] text-[#6B7280] hover:border-[#1B2A4A] hover:text-[#1B2A4A] px-5 py-2.5 rounded text-sm font-medium transition-colors"
