@@ -103,29 +103,29 @@ export default function WipListClient({
 
   const statusBadge = (status: string) =>
     status === "final"
-      ? "bg-blue-900 text-blue-300"
-      : "bg-yellow-900 text-yellow-300";
+      ? "bg-blue-100 text-blue-700"
+      : "bg-amber-100 text-amber-700";
 
   return (
     <div className="px-4 py-10">
       <div className="max-w-screen-xl mx-auto">
         <div className="flex items-center justify-between mb-8">
-          <h1 className="text-2xl font-bold">WIP Reports</h1>
+          <h1 className="text-2xl font-bold text-[#1A1A1A]">WIP Reports</h1>
           <button
             onClick={openModal}
-            className="bg-[#C9A84C] hover:bg-[#b8953e] text-[#1F3864] font-bold px-5 py-2 rounded transition-colors"
+            className="bg-[#1B2A4A] hover:bg-[#243d70] text-white font-bold px-5 py-2 rounded transition-colors"
           >
             + New WIP Report
           </button>
         </div>
 
         {reports.length === 0 ? (
-          <p className="text-gray-400 py-20 text-center">No reports yet.</p>
+          <p className="text-[#6B7280] py-20 text-center">No reports yet.</p>
         ) : (
-          <div className="overflow-hidden rounded-lg border border-[#2e4a7a]">
+          <div className="overflow-hidden rounded-lg border border-[#E5E7EB]">
             <table className="w-full text-sm">
               <thead>
-                <tr className="bg-[#162a50] text-[#C9A84C] text-left">
+                <tr className="bg-[#1B2A4A] text-white text-left">
                   <th className="px-4 py-3 font-semibold">Period Date</th>
                   <th className="px-4 py-3 font-semibold">Status</th>
                   <th className="px-4 py-3 font-semibold">Finalized</th>
@@ -137,9 +137,9 @@ export default function WipListClient({
                 {reports.map((r, i) => (
                   <tr
                     key={r.id}
-                    className={`${i % 2 === 0 ? "bg-[#1a3260]" : "bg-[#1F3864]"} hover:bg-[#243d70] transition-colors`}
+                    className={`${i % 2 === 0 ? "bg-white" : "bg-[#F9FAFB]"} hover:bg-[#F3F4F6] transition-colors`}
                   >
-                    <td className="px-4 py-2 font-mono">
+                    <td className="px-4 py-2 font-mono text-[#1A1A1A]">
                       {formatDate(r.period_date)}
                     </td>
                     <td className="px-4 py-2">
@@ -147,17 +147,17 @@ export default function WipListClient({
                         {r.status}
                       </span>
                     </td>
-                    <td className="px-4 py-2 text-gray-400">
+                    <td className="px-4 py-2 text-[#6B7280]">
                       {formatDate(r.finalized_at)}
                     </td>
-                    <td className="px-4 py-2 text-gray-400">
+                    <td className="px-4 py-2 text-[#6B7280]">
                       {formatDate(r.created_at)}
                     </td>
                     <td className="px-4 py-2 text-center">
                       <div className="flex gap-2 justify-center">
                         <Link
                           href={`/wip/${r.id}`}
-                          className="text-xs border border-[#C9A84C] text-[#C9A84C] hover:bg-[#C9A84C]/10 px-3 py-1 rounded transition-colors"
+                          className="text-xs border border-[#1B2A4A] text-[#1B2A4A] hover:bg-[#1B2A4A]/10 px-3 py-1 rounded transition-colors"
                         >
                           {r.status === "draft" ? "Edit" : "View"}
                         </Link>
@@ -165,7 +165,7 @@ export default function WipListClient({
                           <button
                             onClick={() => handleDeleteReport(r.id, r.period_date)}
                             disabled={deletingReport === r.id}
-                            className="text-xs border border-red-500 text-red-400 hover:bg-red-500/10 px-3 py-1 rounded transition-colors disabled:opacity-50"
+                            className="text-xs border border-red-300 text-red-600 hover:bg-red-50 px-3 py-1 rounded transition-colors disabled:opacity-50"
                           >
                             {deletingReport === r.id ? "..." : "Delete"}
                           </button>
@@ -182,65 +182,65 @@ export default function WipListClient({
 
       {/* New Report Modal */}
       {modalOpen && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 px-4">
-          <div className="bg-[#162a50] border border-[#2e4a7a] rounded-lg w-full max-w-lg p-6">
-            <h2 className="text-xl font-bold text-[#C9A84C] mb-5">New WIP Report</h2>
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
+          <div className="bg-white border border-[#E5E7EB] rounded-lg w-full max-w-lg p-6 shadow-lg">
+            <h2 className="text-xl font-bold text-[#1A1A1A] mb-5">New WIP Report</h2>
 
             {error && (
-              <div className="mb-4 bg-red-900/50 border border-red-600 text-red-200 px-3 py-2 rounded text-sm">
+              <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded text-sm">
                 {error}
               </div>
             )}
 
             <div className="mb-4">
-              <label className="block text-sm text-gray-300 mb-1">Period End Date *</label>
+              <label className="block text-sm text-[#374151] mb-1">Period End Date *</label>
               <input
                 type="date"
                 value={periodDate}
                 onChange={(e) => setPeriodDate(e.target.value)}
-                className="w-full bg-[#1F3864] border border-[#2e4a7a] text-white rounded px-3 py-2 focus:outline-none focus:border-[#C9A84C]"
+                className="w-full bg-white border border-[#E5E7EB] text-[#1A1A1A] rounded px-3 py-2 focus:outline-none focus:border-[#1B2A4A]"
               />
             </div>
 
             <div className="mb-5">
               <div className="flex items-center justify-between mb-2">
-                <label className="text-sm text-gray-300">Include Jobs *</label>
+                <label className="text-sm text-[#374151]">Include Jobs *</label>
                 <div className="flex gap-3 text-xs">
                   <button
                     onClick={() => setSelectedJobIds(new Set(activeJobs.map((j) => j.id)))}
-                    className="text-[#C9A84C] hover:underline"
+                    className="text-[#1B2A4A] hover:underline"
                   >
                     All
                   </button>
                   <button
                     onClick={() => setSelectedJobIds(new Set())}
-                    className="text-gray-400 hover:underline"
+                    className="text-[#6B7280] hover:underline"
                   >
                     Clear
                   </button>
                 </div>
               </div>
-              <div className="max-h-56 overflow-y-auto border border-[#2e4a7a] rounded">
+              <div className="max-h-56 overflow-y-auto border border-[#E5E7EB] rounded">
                 {activeJobs.length === 0 ? (
-                  <p className="text-gray-400 text-sm px-3 py-4 text-center">
+                  <p className="text-[#6B7280] text-sm px-3 py-4 text-center">
                     No active jobs found.
                   </p>
                 ) : (
                   activeJobs.map((job) => (
                     <label
                       key={job.id}
-                      className="flex items-center gap-3 px-3 py-2 hover:bg-[#1F3864] cursor-pointer text-sm"
+                      className="flex items-center gap-3 px-3 py-2 hover:bg-[#F9FAFB] cursor-pointer text-sm"
                     >
                       <input
                         type="checkbox"
                         checked={selectedJobIds.has(job.id)}
                         onChange={() => toggleJob(job.id)}
-                        className="accent-[#C9A84C]"
+                        className="accent-[#1B2A4A]"
                       />
-                      <span className="font-mono text-gray-300 w-12 shrink-0">
+                      <span className="font-mono text-[#6B7280] w-12 shrink-0">
                         {job.job_number}
                       </span>
-                      <span>{job.job_name}</span>
+                      <span className="text-[#1A1A1A]">{job.job_name}</span>
                     </label>
                   ))
                 )}
@@ -251,13 +251,13 @@ export default function WipListClient({
               <button
                 onClick={handleCreate}
                 disabled={creating}
-                className="bg-[#C9A84C] hover:bg-[#b8953e] disabled:opacity-50 text-[#1F3864] font-bold px-5 py-2 rounded transition-colors"
+                className="bg-[#1B2A4A] hover:bg-[#243d70] disabled:opacity-50 text-white font-bold px-5 py-2 rounded transition-colors"
               >
                 {creating ? "Creating..." : "Create Report"}
               </button>
               <button
                 onClick={() => setModalOpen(false)}
-                className="border border-[#2e4a7a] text-gray-300 hover:border-[#C9A84C] hover:text-[#C9A84C] px-5 py-2 rounded transition-colors"
+                className="border border-[#E5E7EB] text-[#6B7280] hover:border-[#1B2A4A] hover:text-[#1B2A4A] px-5 py-2 rounded transition-colors"
               >
                 Cancel
               </button>

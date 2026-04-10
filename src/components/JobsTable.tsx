@@ -50,9 +50,9 @@ export default function JobsTable({ jobs: initialJobs }: { jobs: Job[] }) {
 
   if (jobs.length === 0) {
     return (
-      <p className="text-gray-400 text-center py-20">
+      <p className="text-[#6B7280] text-center py-20">
         No jobs yet.{" "}
-        <Link href="/jobs/new" className="text-[#C9A84C] underline">
+        <Link href="/jobs/new" className="text-[#1B2A4A] underline">
           Add the first one.
         </Link>
       </p>
@@ -60,10 +60,10 @@ export default function JobsTable({ jobs: initialJobs }: { jobs: Job[] }) {
   }
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-[#2e4a7a]">
+    <div className="overflow-x-auto rounded-lg border border-[#E5E7EB]">
       <table className="w-full text-sm">
         <thead>
-          <tr className="bg-[#162a50] text-[#C9A84C] text-left">
+          <tr className="bg-[#1B2A4A] text-white text-left">
             <th className="px-3 py-3 font-semibold whitespace-nowrap">Job #</th>
             <th className="px-3 py-3 font-semibold whitespace-nowrap">Job Name</th>
             <th className="px-3 py-3 font-semibold whitespace-nowrap">Type</th>
@@ -97,60 +97,60 @@ export default function JobsTable({ jobs: initialJobs }: { jobs: Job[] }) {
               revisedContract > 0
                 ? ((revisedContract - Number(job.est_total_cost)) / revisedContract) * 100
                 : 0;
-            const rowBg = i % 2 === 0 ? "bg-[#1a3260]" : "bg-[#1F3864]";
+            const rowBg = i % 2 === 0 ? "bg-white" : "bg-[#F9FAFB]";
             const isDeleting = deleting === job.id;
 
             return (
               <tr
                 key={job.id}
-                className={`${rowBg} hover:bg-[#243d70] transition-colors ${isDeleting ? "opacity-50" : ""}`}
+                className={`${rowBg} hover:bg-[#F3F4F6] transition-colors ${isDeleting ? "opacity-50" : ""}`}
               >
-                <td className="px-3 py-2 whitespace-nowrap font-mono">{job.job_number}</td>
-                <td className="px-3 py-2">{job.job_name}</td>
-                <td className="px-3 py-2 whitespace-nowrap text-gray-300">{job.job_type}</td>
+                <td className="px-3 py-2 whitespace-nowrap font-mono text-[#1A1A1A]">{job.job_number}</td>
+                <td className="px-3 py-2 text-[#1A1A1A]">{job.job_name}</td>
+                <td className="px-3 py-2 whitespace-nowrap text-[#6B7280]">{job.job_type}</td>
                 <td className="px-3 py-2 whitespace-nowrap">
                   <span
                     className={`px-2 py-0.5 rounded text-xs font-semibold ${
                       job.status === "Active"
-                        ? "bg-green-900 text-green-300"
+                        ? "bg-green-100 text-green-700"
                         : job.status === "Complete"
-                        ? "bg-blue-900 text-blue-300"
-                        : "bg-gray-700 text-gray-400"
+                        ? "bg-blue-100 text-blue-700"
+                        : "bg-gray-100 text-gray-500"
                     }`}
                   >
                     {job.status}
                   </span>
                 </td>
-                <td className="px-3 py-2 text-right whitespace-nowrap">
+                <td className="px-3 py-2 text-right whitespace-nowrap text-[#1A1A1A]">
                   ${fmt(Number(job.original_contract))}
                 </td>
-                <td className="px-3 py-2 text-right whitespace-nowrap">
+                <td className="px-3 py-2 text-right whitespace-nowrap text-[#1A1A1A]">
                   ${fmt(Number(job.approved_cos))}
                 </td>
-                <td className="px-3 py-2 text-right whitespace-nowrap font-semibold">
+                <td className="px-3 py-2 text-right whitespace-nowrap font-semibold text-[#1A1A1A]">
                   ${fmt(revisedContract)}
                 </td>
-                <td className="px-3 py-2 text-right whitespace-nowrap">
+                <td className="px-3 py-2 text-right whitespace-nowrap text-[#1A1A1A]">
                   ${fmt(Number(job.est_total_cost))}
                 </td>
-                <td className="px-3 py-2 text-right whitespace-nowrap">
+                <td className="px-3 py-2 text-right whitespace-nowrap text-[#1A1A1A]">
                   {estGpPct.toFixed(2)}%
                 </td>
-                <td className="px-3 py-2 text-gray-300 max-w-[180px] truncate">
+                <td className="px-3 py-2 text-[#6B7280] max-w-[180px] truncate">
                   {job.notes ?? "—"}
                 </td>
                 <td className="px-3 py-2 whitespace-nowrap text-center">
                   <div className="flex gap-2 justify-center">
                     <Link
                       href={`/jobs/${job.id}/edit`}
-                      className="text-xs border border-[#C9A84C] text-[#C9A84C] hover:bg-[#C9A84C]/10 px-2 py-1 rounded transition-colors"
+                      className="text-xs border border-[#1B2A4A] text-[#1B2A4A] hover:bg-[#1B2A4A]/10 px-2 py-1 rounded transition-colors"
                     >
                       Edit
                     </Link>
                     <button
                       onClick={() => handleDelete(job.id)}
                       disabled={isDeleting}
-                      className="text-xs border border-red-500 text-red-400 hover:bg-red-500/10 px-2 py-1 rounded transition-colors disabled:opacity-50"
+                      className="text-xs border border-red-300 text-red-600 hover:bg-red-50 px-2 py-1 rounded transition-colors disabled:opacity-50"
                     >
                       {isDeleting ? "..." : "Delete"}
                     </button>
