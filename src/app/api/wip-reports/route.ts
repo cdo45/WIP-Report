@@ -89,29 +89,39 @@ export async function POST(request: Request) {
         `;
 
         if (priorItem) {
-          // Use prior line item values, falling back to job defaults if null
+          // Carry forward revised contract and est cost from prior period
           revised_contract = Number(priorItem.revised_contract ?? revised_contract);
-          est_total_cost = Number(priorItem.est_total_cost ?? est_total_cost);
+          est_total_cost   = Number(priorItem.est_total_cost   ?? est_total_cost);
 
-          const costsToDate = Number(priorItem.costs_to_date);
+          const costsToDate    = Number(priorItem.costs_to_date);
           const billingsToDate = Number(priorItem.billings_to_date);
-          const pmOverride =
+          const pmOverride     =
             priorItem.pm_pct_override != null
               ? Number(priorItem.pm_pct_override)
               : null;
 
-          const pctComplete = est_total_cost > 0 ? costsToDate / est_total_cost : 0;
+          // Compute earned revenue at the end of the prior period.
+          // This becomes the new period's prior_year_earned baseline so that
+          // cy_earned = earned_revenue − prior_year_earned = INCREMENTAL this period.
+          // NOTE: use calculated values, NOT the prior item's stored prior_year fields.
+          const pctComplete  = est_total_cost > 0 ? costsToDate / est_total_cost : 0;
           const effectivePct = pmOverride !== null ? pmOverride : pctComplete;
-          const earnedRevenue = effectivePct >= 1
-            ? Math.max(billingsToDate, revised_contract)
-            : effectivePct * revised_contract;
+          const earnedRevenue =
+            effectivePct >= 1
+              ? Math.max(billingsToDate, revised_contract)
+              : effectivePct * revised_contract;
 
-          prior_year_earned    = earnedRevenue;
-          prior_year_billings  = billingsToDate;
-          prior_year_costs     = costsToDate;
-          prior_itd_billings   = billingsToDate;
-          prior_itd_costs      = costsToDate;
-          is_prior_locked      = true;
+          // prior_year_* = ITD state at end of the prior period (baseline for CY)
+          prior_year_earned   = earnedRevenue;
+          prior_year_billings = billingsToDate;
+          prior_year_costs    = costsToDate;
+
+          // prior_itd_* = same ITD totals, used to derive locked-row CP entry:
+          //   costs_to_date = prior_itd_costs + cp_costs
+          //   billings_to_date = prior_itd_billings + cp_billings
+          prior_itd_billings = billingsToDate;
+          prior_itd_costs    = costsToDate;
+          is_prior_locked    = true;
         }
       }
 
