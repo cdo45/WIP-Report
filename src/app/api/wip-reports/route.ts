@@ -17,14 +17,17 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const { period_date, job_ids } = await request.json();
+    console.log(`POST /api/wip-reports — period_date=${period_date} job_ids=${JSON.stringify(job_ids)}`);
 
     // Find most recent finalized report before this period
     const [priorReport] = await sql`
-      SELECT id FROM wip_reports
+      SELECT id, period_date FROM wip_reports
       WHERE status = 'final' AND period_date < ${period_date}
       ORDER BY period_date DESC
       LIMIT 1
     `;
+
+    console.log(`Prior finalized report: ${priorReport ? `id=${priorReport.id} period_date=${priorReport.period_date}` : "NONE — prior_year fields will be 0"}`);
 
     // Auto-populate GL balances from prior report's calculated should-be values
     let prior_balance_1290 = 0;
@@ -53,6 +56,7 @@ export async function POST(request: Request) {
       }
       prior_balance_1290 = totalUnderbillings;
       prior_balance_2030 = -totalOverbillings;
+      console.log(`GL balances from prior report: 1290=${prior_balance_1290.toFixed(2)} 2030=${prior_balance_2030.toFixed(2)}`);
     }
 
     // Create the report record
@@ -61,6 +65,7 @@ export async function POST(request: Request) {
       VALUES (${period_date}, 'draft', ${prior_balance_1290}, ${prior_balance_2030})
       RETURNING *
     `;
+    console.log(`Created wip_report id=${report.id}`);
 
     // Create a line item for each job
     for (const job_id of job_ids) {
@@ -101,9 +106,9 @@ export async function POST(request: Request) {
               : null;
 
           // Compute earned revenue at the end of the prior period.
-          // This becomes the new period's prior_year_earned baseline so that
-          // cy_earned = earned_revenue − prior_year_earned = INCREMENTAL this period.
-          // NOTE: use calculated values, NOT the prior item's stored prior_year fields.
+          // This becomes prior_year_earned so that:
+          //   cy_earned = earned_revenue(new) − prior_year_earned = INCREMENTAL this period
+          // Use calculated values, NOT the prior item's stored prior_year fields.
           const pctComplete  = est_total_cost > 0 ? costsToDate / est_total_cost : 0;
           const effectivePct = pmOverride !== null ? pmOverride : pctComplete;
           const earnedRevenue =
@@ -111,19 +116,23 @@ export async function POST(request: Request) {
               ? Math.max(billingsToDate, revised_contract)
               : effectivePct * revised_contract;
 
-          // prior_year_* = ITD state at end of the prior period (baseline for CY)
+          // prior_year_* = ITD state at end of the prior period (baseline for CY delta)
           prior_year_earned   = earnedRevenue;
           prior_year_billings = billingsToDate;
           prior_year_costs    = costsToDate;
 
-          // prior_itd_* = same ITD totals, used to derive locked-row CP entry:
-          //   costs_to_date = prior_itd_costs + cp_costs
+          // prior_itd_* = locked-row CP baseline:
+          //   costs_to_date    = prior_itd_costs    + cp_costs
           //   billings_to_date = prior_itd_billings + cp_billings
           prior_itd_billings = billingsToDate;
           prior_itd_costs    = costsToDate;
           is_prior_locked    = true;
+        } else {
+          console.log(`  job_id=${job_id}: NOT found in prior report ${priorReport.id} — prior_year fields will be 0`);
         }
       }
+
+      console.log(`  INSERT wip_line_item: job_id=${job_id} revised_contract=${revised_contract.toFixed(2)} est_total_cost=${est_total_cost.toFixed(2)} prior_itd_costs=${prior_itd_costs.toFixed(2)} prior_itd_billings=${prior_itd_billings.toFixed(2)} prior_year_earned=${prior_year_earned.toFixed(2)} prior_year_billings=${prior_year_billings.toFixed(2)} prior_year_costs=${prior_year_costs.toFixed(2)} is_prior_locked=${is_prior_locked}`);
 
       await sql`
         INSERT INTO wip_line_items (
@@ -146,6 +155,7 @@ export async function POST(request: Request) {
       `;
     }
 
+    console.log(`POST /api/wip-reports complete — report id=${report.id} with ${job_ids.length} line items`);
     revalidatePath("/jobs");
     revalidatePath("/wip");
     return NextResponse.json(report, { status: 201 });
