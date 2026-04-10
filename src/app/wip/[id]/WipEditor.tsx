@@ -559,12 +559,19 @@ export default function WipEditor({
 
     // GP fade jobs
     const fadedJobs = rows
-      .map((r) => ({
-        num: r.item.job_number, name: r.item.job_name,
-        orig: Number(r.item.original_gp_pct),
-        curr: r.estGpPct * 100,
-        delta: r.estGpPct * 100 - Number(r.item.original_gp_pct),
-      }))
+      .map((r) => {
+        const origRevenue = Number(r.item.original_contract) + Number(r.item.approved_cos);
+        const origGpPct = origRevenue > 0
+          ? ((origRevenue - Number(r.item.job_est_total_cost)) / origRevenue) * 100
+          : 0;
+        const currGpPct = r.estGpPct * 100;
+        return {
+          num: r.item.job_number, name: r.item.job_name,
+          orig: origGpPct,
+          curr: currGpPct,
+          delta: currGpPct - origGpPct,
+        };
+      })
       .filter((j) => j.delta < -5)
       .sort((a, b) => a.delta - b.delta);
 

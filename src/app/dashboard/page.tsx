@@ -9,7 +9,9 @@ export interface DashLineItem {
   job_id: number;
   job_number: string;
   job_name: string;
-  original_gp_pct: number;
+  original_contract: number;
+  approved_cos: number;
+  job_est_total_cost: number;
   revised_contract: number;
   est_total_cost: number;
   costs_to_date: number;
@@ -55,7 +57,8 @@ export default async function DashboardPage() {
       latestItems = (await sql`
         SELECT
           wli.id, wli.job_id,
-          j.job_number, j.job_name, j.original_gp_pct,
+          j.job_number, j.job_name,
+          j.original_contract, j.approved_cos, j.est_total_cost AS job_est_total_cost,
           wli.revised_contract, wli.est_total_cost,
           wli.costs_to_date, wli.billings_to_date,
           wli.pm_pct_override,

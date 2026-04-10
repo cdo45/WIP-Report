@@ -224,13 +224,21 @@ export default function DashboardClient({
   const gpFade = useMemo(
     () =>
       computed
-        .map(({ item, estGpPct }) => ({
-          jobNumber: item.job_number,
-          jobName: item.job_name,
-          originalGp: Number(item.original_gp_pct),
-          currentGp: estGpPct * 100,
-          delta: estGpPct * 100 - Number(item.original_gp_pct),
-        }))
+        .map(({ item, estGpPct }) => {
+          const origRevenue = Number(item.original_contract) + Number(item.approved_cos);
+          const originalGp =
+            origRevenue > 0
+              ? ((origRevenue - Number(item.job_est_total_cost)) / origRevenue) * 100
+              : 0;
+          const currentGp = estGpPct * 100;
+          return {
+            jobNumber: item.job_number,
+            jobName: item.job_name,
+            originalGp,
+            currentGp,
+            delta: currentGp - originalGp,
+          };
+        })
         .sort((a, b) => a.delta - b.delta),
     [computed]
   );
@@ -516,7 +524,9 @@ export default function DashboardClient({
                           ? "text-[#B22234]"
                           : delta < 0
                           ? "text-[#D97706]"
-                          : "text-[#16A34A]"
+                          : delta > 0
+                          ? "text-[#16A34A]"
+                          : "text-[#6B7280]"
                       }`}
                     >
                       {delta >= 0 ? "+" : ""}

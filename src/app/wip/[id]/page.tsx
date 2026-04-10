@@ -23,6 +23,7 @@ export interface LineItemWithJob {
   original_contract: number;
   approved_cos: number;
   original_gp_pct: number;
+  job_est_total_cost: number;
   // Editable per-line-item values (from wip_line_items)
   revised_contract: number;
   est_total_cost: number;
@@ -64,7 +65,8 @@ export default async function WipReportPage({
         SELECT
           wli.*,
           j.job_number, j.job_name, j.job_type,
-          j.original_contract, j.approved_cos, j.original_gp_pct
+          j.original_contract, j.approved_cos, j.original_gp_pct,
+          j.est_total_cost AS job_est_total_cost
         FROM wip_line_items wli
         JOIN jobs j ON j.id = wli.job_id
         WHERE wli.report_id = ${id}
