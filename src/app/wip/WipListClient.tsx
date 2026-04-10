@@ -29,11 +29,14 @@ interface ActiveJob {
 export default function WipListClient({
   reports: initialReports,
   activeJobs,
+  readyToCloseJobIds,
 }: {
   reports: WipReport[];
   activeJobs: ActiveJob[];
+  readyToCloseJobIds: number[];
 }) {
   const router = useRouter();
+  const readyToCloseSet = new Set(readyToCloseJobIds);
   const [reports, setReports] = useState<WipReport[]>(initialReports);
   const [modalOpen, setModalOpen] = useState(false);
   const [periodDate, setPeriodDate] = useState("");
@@ -74,7 +77,8 @@ export default function WipListClient({
     setModalOpen(true);
     setError(null);
     setPeriodDate("");
-    setSelectedJobIds(new Set(activeJobs.map((j) => j.id)));
+    // Exclude "Ready to Close" jobs by default — they can still be re-checked manually
+    setSelectedJobIds(new Set(activeJobs.filter((j) => !readyToCloseSet.has(j.id)).map((j) => j.id)));
   }
 
   async function handleCreate() {
@@ -221,6 +225,12 @@ export default function WipListClient({
                     All
                   </button>
                   <button
+                    onClick={() => setSelectedJobIds(new Set(activeJobs.filter((j) => !readyToCloseSet.has(j.id)).map((j) => j.id)))}
+                    className="text-[#6B7280] hover:underline"
+                  >
+                    Exclude Closed
+                  </button>
+                  <button
                     onClick={() => setSelectedJobIds(new Set())}
                     className="text-[#6B7280] hover:underline"
                   >
@@ -228,29 +238,45 @@ export default function WipListClient({
                   </button>
                 </div>
               </div>
+              {readyToCloseJobIds.length > 0 && (
+                <p className="text-xs text-[#6B7280] bg-gray-50 border border-[#E5E7EB] rounded px-3 py-1.5 mb-2">
+                  {readyToCloseJobIds.length} job{readyToCloseJobIds.length !== 1 ? "s" : ""} from the prior period{" "}
+                  {readyToCloseJobIds.length !== 1 ? "are" : "is"} 100% complete with no activity — excluded by default.
+                </p>
+              )}
               <div className="max-h-56 overflow-y-auto border border-[#E5E7EB] rounded">
                 {activeJobs.length === 0 ? (
                   <p className="text-[#6B7280] text-sm px-3 py-4 text-center">
                     No active jobs found.
                   </p>
                 ) : (
-                  activeJobs.map((job) => (
-                    <label
-                      key={job.id}
-                      className="flex items-center gap-3 px-3 py-2 hover:bg-[#F9FAFB] cursor-pointer text-sm"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selectedJobIds.has(job.id)}
-                        onChange={() => toggleJob(job.id)}
-                        className="accent-[#1B2A4A]"
-                      />
-                      <span className="font-mono text-[#6B7280] w-12 shrink-0">
-                        {job.job_number}
-                      </span>
-                      <span className="text-[#1A1A1A]">{job.job_name}</span>
-                    </label>
-                  ))
+                  activeJobs.map((job) => {
+                    const isRtc = readyToCloseSet.has(job.id);
+                    return (
+                      <label
+                        key={job.id}
+                        className="flex items-center gap-3 px-3 py-2 hover:bg-[#F9FAFB] cursor-pointer text-sm"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedJobIds.has(job.id)}
+                          onChange={() => toggleJob(job.id)}
+                          className="accent-[#1B2A4A]"
+                        />
+                        <span className="font-mono text-[#6B7280] w-12 shrink-0">
+                          {job.job_number}
+                        </span>
+                        <span className={`flex-1 ${isRtc ? "text-[#9CA3AF]" : "text-[#1A1A1A]"}`}>
+                          {job.job_name}
+                        </span>
+                        {isRtc && (
+                          <span className="shrink-0 px-1.5 py-0.5 text-[10px] font-semibold bg-gray-100 text-gray-400 rounded">
+                            Ready to Close
+                          </span>
+                        )}
+                      </label>
+                    );
+                  })
                 )}
               </div>
             </div>

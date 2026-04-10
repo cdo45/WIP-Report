@@ -14,6 +14,7 @@ import {
   Pie,
   Cell,
   ResponsiveContainer,
+  ReferenceLine,
 } from "recharts";
 import type { LineItemWithJob, WipReport } from "../page";
 
@@ -276,6 +277,7 @@ export default function WipSummaryClient({
     name: r.item.job_number,
     "Costs to Date": Math.round(r.costsToDate),
     Remaining: Math.round(Math.max(0, r.estTotalCost - r.costsToDate)),
+    estTotalCost: Math.round(r.estTotalCost), // not rendered as bar — used by tooltip
   }));
 
   // Dynamic height so all jobs fit in horizontal bar charts
@@ -286,6 +288,28 @@ export default function WipSummaryClient({
   const dollarFmt = (v: any) => `$${fmt$(Number(v ?? 0))}`;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const pctFmtTip = (v: any) => `${Number(v ?? 0).toFixed(1)}%`;
+
+  // ── Custom tooltip: Budget Consumption ───────────────────────────────────
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const BudgetTooltip = ({ active, payload, label }: any) => {
+    if (!active || !payload?.length) return null;
+    const data = payload[0].payload;
+    const costs = Number(data["Costs to Date"] ?? 0);
+    const remaining = Number(data["Remaining"] ?? 0);
+    const est = Number(data.estTotalCost ?? costs + remaining);
+    const pctConsumed = est > 0 ? (costs / est) * 100 : 0;
+    return (
+      <div className="bg-white border border-[#E5E7EB] rounded shadow-sm px-3 py-2 text-xs space-y-0.5">
+        <p className="font-semibold text-[#1B2A4A] mb-1">{label}</p>
+        <p className="text-[#6B7280]">Est Total Cost: <span className="font-mono text-[#1A1A1A]">${fmt$(est)}</span></p>
+        <p className="text-[#6B7280]">Costs to Date: <span className="font-mono text-[#1A1A1A]">${fmt$(costs)}</span></p>
+        <p className="text-[#6B7280]">Remaining: <span className="font-mono text-[#1A1A1A]">${fmt$(remaining)}</span></p>
+        <p className="text-[#6B7280] border-t border-[#E5E7EB] pt-0.5 mt-0.5">
+          % Consumed: <span className={`font-mono font-semibold ${pctConsumed > 90 ? "text-[#B22234]" : "text-[#1A1A1A]"}`}>{pctConsumed.toFixed(1)}%</span>
+        </p>
+      </div>
+    );
+  };
 
   // ── Styles ────────────────────────────────────────────────────────────────
   const sectionCls =
@@ -577,6 +601,17 @@ export default function WipSummaryClient({
                         />
                       ))}
                     </Bar>
+                    <ReferenceLine
+                      x={parseFloat((wtdAvgGpPct * 100).toFixed(1))}
+                      stroke="#9CA3AF"
+                      strokeDasharray="4 4"
+                      label={{
+                        value: `Wtd Avg: ${(wtdAvgGpPct * 100).toFixed(1)}%`,
+                        position: "insideTopRight",
+                        fontSize: 9,
+                        fill: "#6B7280",
+                      }}
+                    />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -606,7 +641,7 @@ export default function WipSummaryClient({
                       tick={{ fontSize: 9, fill: "#1A1A1A", fontFamily: "monospace" }}
                       width={68}
                     />
-                    <Tooltip formatter={dollarFmt} />
+                    <Tooltip content={BudgetTooltip} />
                     <Legend wrapperStyle={{ fontSize: 10, paddingTop: 8 }} />
                     <Bar
                       dataKey="Costs to Date"

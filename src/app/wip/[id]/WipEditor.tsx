@@ -963,8 +963,17 @@ ${fadedJobs.length > 0 ? `
                           {item.job_number}
                         </td>
                         {/* Sticky: Job Name */}
-                        <td className={`${tdL} sticky left-[72px] z-10 ${stickyBg} max-w-[150px] truncate`}>
-                          {item.job_name}
+                        <td className={`${tdL} sticky left-[72px] z-10 ${stickyBg} max-w-[150px]`}>
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <span className="truncate">{item.job_name}</span>
+                            {pctComplete >= 1 &&
+                              toNum(editable.cp_costs) === 0 &&
+                              toNum(editable.cp_billings) === 0 && (
+                                <span className="shrink-0 px-1.5 py-0.5 text-[10px] font-semibold bg-gray-100 text-gray-500 rounded whitespace-nowrap">
+                                  Ready to Close
+                                </span>
+                              )}
+                          </div>
                         </td>
 
                         {/* Editable: Rev Contract */}

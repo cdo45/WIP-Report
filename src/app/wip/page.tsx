@@ -21,6 +21,7 @@ interface ActiveJob {
 export default async function WipPage() {
   let reports: WipReport[] = [];
   let activeJobs: ActiveJob[] = [];
+  let readyToCloseJobIds: number[] = [];
 
   try {
     reports = (await sql`
@@ -35,9 +36,32 @@ export default async function WipPage() {
       WHERE status = 'Active'
       ORDER BY job_number
     `) as ActiveJob[];
+
+    // Find jobs that are 100% complete with no current-period activity in the
+    // most recent finalized report — these will be unchecked by default when
+    // creating a new report.
+    const priorRows = await sql`
+      SELECT DISTINCT wli.job_id
+      FROM wip_line_items wli
+      JOIN wip_reports wr ON wr.id = wli.report_id
+      WHERE wr.status = 'final'
+        AND wr.id = (
+          SELECT id FROM wip_reports WHERE status = 'final'
+          ORDER BY period_date DESC LIMIT 1
+        )
+        AND wli.cp_costs = 0
+        AND wli.cp_billings = 0
+        AND wli.est_total_cost > 0
+        AND (
+          (wli.pm_pct_override IS NOT NULL AND wli.pm_pct_override >= 1)
+          OR (NOT wli.is_prior_locked AND wli.costs_to_date >= wli.est_total_cost)
+          OR (wli.is_prior_locked AND (wli.prior_itd_costs + wli.cp_costs) >= wli.est_total_cost)
+        )
+    `;
+    readyToCloseJobIds = priorRows.map((r) => r.job_id as number);
   } catch (err) {
     console.error("Failed to fetch WIP data:", err);
   }
 
-  return <WipListClient reports={reports} activeJobs={activeJobs} />;
+  return <WipListClient reports={reports} activeJobs={activeJobs} readyToCloseJobIds={readyToCloseJobIds} />;
 }
