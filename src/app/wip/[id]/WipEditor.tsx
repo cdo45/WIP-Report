@@ -86,10 +86,15 @@ function calcRow(
   const cyCosts = costsToDate - pyCosts;
   const cyGp = cyEarned - cyCosts;
 
+  // Period O/U = change in over/under position this period only
+  // = cy_earned - cy_billings = (earnedRev - pyEarned) - (billingsToDate - pyBillings)
+  const periodOverUnder = cyEarned - cyBillings;
+
   return {
     revisedContract, estTotalCost, estGpPct,
     costsToDate, billingsToDate,
     pctComplete, effectivePct, earnedRevenue, overUnder,
+    periodOverUnder,
     itdGp, itdGpPct,
     cyEarned, cyBillings, cyCosts, cyGp,
   };
@@ -483,15 +488,16 @@ export default function WipEditor({
     function totals(set: typeof rows) {
       return set.reduce(
         (s, r) => ({
-          rev:      s.rev      + r.revisedContract,
-          cost:     s.cost     + r.estTotalCost,
-          costItd:  s.costItd  + r.costsToDate,
-          billItd:  s.billItd  + r.billingsToDate,
-          earned:   s.earned   + r.earnedRevenue,
-          ou:       s.ou       + r.overUnder,
-          itdGp:    s.itdGp    + r.itdGp,
+          rev:       s.rev       + r.revisedContract,
+          cost:      s.cost      + r.estTotalCost,
+          costItd:   s.costItd   + r.costsToDate,
+          billItd:   s.billItd   + r.billingsToDate,
+          earned:    s.earned    + r.earnedRevenue,
+          periodOU:  s.periodOU  + r.periodOverUnder,
+          ou:        s.ou        + r.overUnder,
+          itdGp:     s.itdGp     + r.itdGp,
         }),
-        { rev: 0, cost: 0, costItd: 0, billItd: 0, earned: 0, ou: 0, itdGp: 0 }
+        { rev: 0, cost: 0, costItd: 0, billItd: 0, earned: 0, periodOU: 0, ou: 0, itdGp: 0 }
       );
     }
 
@@ -500,7 +506,8 @@ export default function WipEditor({
 
     function jobRows(set: typeof rows): string {
       return set.map((r) => {
-        const ouCls = r.overUnder >= 0 ? "pos" : "neg";
+        const pOuCls = r.periodOverUnder >= 0 ? "pos" : "neg";
+        const ouCls  = r.overUnder >= 0 ? "pos" : "neg";
         return `<tr>
           <td>${r.item.job_number}</td>
           <td>${r.item.job_name}</td>
@@ -511,6 +518,7 @@ export default function WipEditor({
           <td class="num">$${d(r.billingsToDate)}</td>
           <td class="num">${pct(r.pctComplete)}</td>
           <td class="num">$${d(r.earnedRevenue)}</td>
+          <td class="num ${pOuCls}">${r.periodOverUnder >= 0 ? "+" : ""}$${d(r.periodOverUnder)}</td>
           <td class="num ${ouCls}">${r.overUnder >= 0 ? "+" : ""}$${d(r.overUnder)}</td>
           <td class="num">$${d(r.itdGp)}</td>
           <td class="num">${pct(r.itdGpPct)}</td>
@@ -519,7 +527,8 @@ export default function WipEditor({
     }
 
     function totalRow(t: ReturnType<typeof totals>): string {
-      const ouCls = t.ou >= 0 ? "pos" : "neg";
+      const pOuCls   = t.periodOU >= 0 ? "pos" : "neg";
+      const ouCls    = t.ou >= 0 ? "pos" : "neg";
       const itdGpPct = t.earned !== 0 ? t.itdGp / t.earned : 0;
       const estGpPct = t.rev > 0 ? (t.rev - t.cost) / t.rev : 0;
       return `<tr class="total-row">
@@ -531,6 +540,7 @@ export default function WipEditor({
         <td class="num">$${d(t.billItd)}</td>
         <td class="num">—</td>
         <td class="num">$${d(t.earned)}</td>
+        <td class="num ${pOuCls}">${t.periodOU >= 0 ? "+" : ""}$${d(t.periodOU)}</td>
         <td class="num ${ouCls}">${t.ou >= 0 ? "+" : ""}$${d(t.ou)}</td>
         <td class="num">$${d(t.itdGp)}</td>
         <td class="num">${pct(itdGpPct)}</td>
@@ -657,7 +667,7 @@ ${inProgress.length > 0 ? `
   <th>Job #</th><th>Job Name</th>
   <th class="num">Rev Contract</th><th class="num">Est Cost</th><th class="num">Est GP%</th>
   <th class="num">Costs ITD</th><th class="num">Billings ITD</th><th class="num">% Comp</th>
-  <th class="num">Earned Rev</th><th class="num">Over/Under</th>
+  <th class="num">Earned Rev</th><th class="num">Period O/U</th><th class="num">Total O/U</th>
   <th class="num">ITD GP$</th><th class="num">ITD GP%</th>
 </tr></thead>
 <tbody>${jobRows(inProgress)}</tbody>
@@ -670,7 +680,7 @@ ${completed.length > 0 ? `
   <th>Job #</th><th>Job Name</th>
   <th class="num">Rev Contract</th><th class="num">Est Cost</th><th class="num">Est GP%</th>
   <th class="num">Costs ITD</th><th class="num">Billings ITD</th><th class="num">% Comp</th>
-  <th class="num">Earned Rev</th><th class="num">Over/Under</th>
+  <th class="num">Earned Rev</th><th class="num">Period O/U</th><th class="num">Total O/U</th>
   <th class="num">ITD GP$</th><th class="num">ITD GP%</th>
 </tr></thead>
 <tbody>${jobRows(completed)}</tbody>
@@ -682,7 +692,7 @@ ${inProgress.length > 0 && completed.length > 0 ? `
   <th>Job #</th><th>Job Name</th>
   <th class="num">Rev Contract</th><th class="num">Est Cost</th><th class="num">Est GP%</th>
   <th class="num">Costs ITD</th><th class="num">Billings ITD</th><th class="num">% Comp</th>
-  <th class="num">Earned Rev</th><th class="num">Over/Under</th>
+  <th class="num">Earned Rev</th><th class="num">Period O/U</th><th class="num">Total O/U</th>
   <th class="num">ITD GP$</th><th class="num">ITD GP%</th>
 </tr></thead>
 <tfoot>${totalRow(allTot)}</tfoot>
@@ -693,9 +703,10 @@ ${inProgress.length > 0 && completed.length > 0 ? `
 <div class="two-col">
 <div class="sum-box">
 <h3>Section 2 — Billings Position</h3>
+<div class="sum-row"><span class="lbl">Period Net O/U</span><span class="val ${netPeriodOverUnder >= 0 ? "pos" : "neg"}">${netPeriodOverUnder >= 0 ? "+" : ""}$${d(Math.abs(netPeriodOverUnder))}</span></div>
 <div class="sum-row"><span class="lbl">Underbillings (Asset 1290)</span><span class="val pos">$${d(totalUnderbillings)}</span></div>
 <div class="sum-row"><span class="lbl">Overbillings (Liability 2030)</span><span class="val neg">$${d(totalOverbillings)}</span></div>
-<div class="sum-row tot"><span class="lbl" style="font-weight:bold">Net Over/Under</span><span class="val ${netOverUnder >= 0 ? "pos" : "neg"}">${netOverUnder >= 0 ? "+" : ""}$${d(netOverUnder)}</span></div>
+<div class="sum-row tot"><span class="lbl" style="font-weight:bold">Cumulative Net O/U (→JE)</span><span class="val ${netOverUnder >= 0 ? "pos" : "neg"}">${netOverUnder >= 0 ? "+" : ""}$${d(netOverUnder)}</span></div>
 <div class="sum-row" style="margin-top:4px"><span class="lbl">Total Backlog</span><span class="val">$${d(totalBacklog)}</span></div>
 </div>
 <div class="sum-box">
@@ -789,9 +800,12 @@ ${fadedJobs.length > 0 ? `
   });
 
   // Summary totals
-  const totalUnderbillings = computed.reduce((s, r) => s + Math.max(0, r.overUnder), 0);
-  const totalOverbillings  = computed.reduce((s, r) => s + Math.max(0, -r.overUnder), 0);
-  const netOverUnder       = totalUnderbillings - totalOverbillings;
+  const totalUnderbillings      = computed.reduce((s, r) => s + Math.max(0, r.overUnder), 0);
+  const totalOverbillings       = computed.reduce((s, r) => s + Math.max(0, -r.overUnder), 0);
+  const netOverUnder            = totalUnderbillings - totalOverbillings;
+  const totalPeriodUnderbillings = computed.reduce((s, r) => s + Math.max(0, r.periodOverUnder), 0);
+  const totalPeriodOverbillings  = computed.reduce((s, r) => s + Math.max(0, -r.periodOverUnder), 0);
+  const netPeriodOverUnder       = totalPeriodUnderbillings - totalPeriodOverbillings;
   const totalBacklog       = computed.reduce((s, r) => s + (r.revisedContract - r.earnedRevenue), 0);
   const totalCyRevenue     = computed.reduce((s, r) => s + r.cyEarned, 0);
   const totalCyCosts       = computed.reduce((s, r) => s + r.cyCosts, 0);
@@ -814,7 +828,7 @@ ${fadedJobs.length > 0 ? `
   const td = "px-2 py-1.5 whitespace-nowrap text-xs text-right text-[#1A1A1A]";
   const tdL = "px-2 py-1.5 whitespace-nowrap text-xs text-[#1A1A1A]";
   const inp = "w-full bg-white border border-[#E5E7EB] text-[#1A1A1A] text-right rounded px-2 py-0.5 text-xs focus:outline-none focus:border-[#1B2A4A]";
-  const COLS = 24;
+  const COLS = 25;
 
   // Final render sort — numeric dash-split: 2024-07 < 2025-01 < 2025-05
   const sortedForRender = [...computed].sort((a, b) => {
@@ -926,7 +940,8 @@ ${fadedJobs.length > 0 ? `
                 <th className={`${th} text-right min-w-[100px]`}>PM% Ovrd</th>
                 <th className={`${th} text-right min-w-[72px]`}>Eff %</th>
                 <th className={`${th} text-right min-w-[120px]`}>Earned Rev</th>
-                <th className={`${th} text-right min-w-[110px]`}>Over/Under</th>
+                <th className={`${th} text-right min-w-[110px]`}>Period O/U</th>
+                <th className={`${th} text-right min-w-[110px]`}>Total O/U</th>
                 <th className={`${th} text-right min-w-[110px]`}>ITD GP $</th>
                 <th className={`${th} text-right min-w-[72px]`}>ITD GP%</th>
                 <th className={`${th} text-right min-w-[100px]`}>CY Earned</th>
@@ -946,7 +961,7 @@ ${fadedJobs.length > 0 ? `
                     costsToDate, billingsToDate,
                     pctComplete, effectivePct, earnedRevenue, overUnder,
                     itdGp, itdGpPct,
-                    cyEarned, cyBillings, cyCosts, cyGp,
+                    cyEarned, cyBillings, cyCosts, cyGp, periodOverUnder,
                   },
                   i
                 ) => {
@@ -1111,6 +1126,11 @@ ${fadedJobs.length > 0 ? `
 
                         <td className={td}>{fmtPct(effectivePct)}</td>
                         <td className={td}>${fmt$(earnedRevenue)}</td>
+                        {/* Period O/U */}
+                        <td className={`px-2 py-1.5 whitespace-nowrap text-xs text-right font-semibold ${periodOverUnder >= 0 ? "text-[#16A34A]" : "text-[#B22234]"}`}>
+                          {periodOverUnder >= 0 ? "+" : ""}${fmt$(periodOverUnder)}
+                        </td>
+                        {/* Total O/U */}
                         <td className={`px-2 py-1.5 whitespace-nowrap text-xs text-right font-semibold ${ouColor}`}>
                           {overUnder >= 0 ? "+" : ""}${fmt$(overUnder)}
                         </td>
@@ -1205,6 +1225,15 @@ ${fadedJobs.length > 0 ? `
             <dl className="space-y-2 text-sm">
               <div className="flex justify-between">
                 <dt className="text-[#374151]">
+                  Period Net O/U{" "}
+                  <span className="text-[#6B7280] text-xs">(this period only)</span>
+                </dt>
+                <dd className={`font-mono font-semibold ${netPeriodOverUnder >= 0 ? "text-[#16A34A]" : "text-[#B22234]"}`}>
+                  {netPeriodOverUnder >= 0 ? "+" : ""}${fmt$(netPeriodOverUnder)}
+                </dd>
+              </div>
+              <div className="flex justify-between border-t border-[#E5E7EB] pt-2">
+                <dt className="text-[#374151]">
                   Underbillings{" "}
                   <span className="text-[#6B7280] text-xs">(Asset — Acct 1290)</span>
                 </dt>
@@ -1218,7 +1247,10 @@ ${fadedJobs.length > 0 ? `
                 <dd className="font-mono text-[#B22234] font-semibold">${fmt$(totalOverbillings)}</dd>
               </div>
               <div className="flex justify-between border-t border-[#E5E7EB] pt-2">
-                <dt className="font-semibold text-[#1A1A1A]">Net Over/Under</dt>
+                <dt className="font-semibold text-[#1A1A1A]">
+                  Cumulative Net O/U{" "}
+                  <span className="text-[#6B7280] text-xs font-normal">(drives JE)</span>
+                </dt>
                 <dd className={`font-mono font-semibold ${netOverUnder >= 0 ? "text-[#16A34A]" : "text-[#B22234]"}`}>
                   {netOverUnder >= 0 ? "+" : ""}${fmt$(netOverUnder)}
                 </dd>
