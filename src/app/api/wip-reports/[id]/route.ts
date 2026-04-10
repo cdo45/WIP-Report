@@ -77,8 +77,7 @@ export async function PUT(
       await sql`
         UPDATE wip_reports SET
           prior_balance_1290 = ${(prior_balance_1290 ?? 0) as number},
-          prior_balance_2030 = ${(prior_balance_2030 ?? 0) as number},
-          updated_at         = NOW()
+          prior_balance_2030 = ${(prior_balance_2030 ?? 0) as number}
         WHERE id = ${reportId}
       `;
     } catch (e) {

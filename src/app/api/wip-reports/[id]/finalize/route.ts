@@ -19,8 +19,7 @@ export async function POST(
     const rows = await sql`
       UPDATE wip_reports SET
         status       = 'final',
-        finalized_at = NOW(),
-        updated_at   = NOW()
+        finalized_at = NOW()
       WHERE id = ${id} AND status = 'draft'
       RETURNING *
     `;
