@@ -100,8 +100,9 @@ export async function POST(request: Request) {
 
           const pctComplete = est_total_cost > 0 ? costsToDate / est_total_cost : 0;
           const effectivePct = pmOverride !== null ? pmOverride : pctComplete;
-          const earnedRevenue =
-            effectivePct >= 1 ? billingsToDate : effectivePct * revised_contract;
+          const earnedRevenue = effectivePct >= 1
+            ? Math.max(billingsToDate, revised_contract)
+            : effectivePct * revised_contract;
 
           prior_year_earned = earnedRevenue;
           prior_year_billings = billingsToDate;
