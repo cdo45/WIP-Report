@@ -75,6 +75,8 @@ export async function POST(request: Request) {
       let prior_year_earned = 0;
       let prior_year_billings = 0;
       let prior_year_costs = 0;
+      let prior_itd_billings = 0;
+      let prior_itd_costs = 0;
       let is_prior_locked = false;
 
       if (priorReport) {
@@ -104,10 +106,12 @@ export async function POST(request: Request) {
             ? Math.max(billingsToDate, revised_contract)
             : effectivePct * revised_contract;
 
-          prior_year_earned = earnedRevenue;
-          prior_year_billings = billingsToDate;
-          prior_year_costs = costsToDate;
-          is_prior_locked = true;
+          prior_year_earned    = earnedRevenue;
+          prior_year_billings  = billingsToDate;
+          prior_year_costs     = costsToDate;
+          prior_itd_billings   = billingsToDate;
+          prior_itd_costs      = costsToDate;
+          is_prior_locked      = true;
         }
       }
 
@@ -115,11 +119,17 @@ export async function POST(request: Request) {
         INSERT INTO wip_line_items (
           report_id, job_id,
           revised_contract, est_total_cost,
+          cp_costs, cp_billings,
+          prior_itd_costs, prior_itd_billings,
+          costs_to_date, billings_to_date,
           prior_year_earned, prior_year_billings, prior_year_costs,
           is_prior_locked
         ) VALUES (
           ${report.id}, ${job_id},
           ${revised_contract}, ${est_total_cost},
+          0, 0,
+          ${prior_itd_costs}, ${prior_itd_billings},
+          ${prior_itd_costs}, ${prior_itd_billings},
           ${prior_year_earned}, ${prior_year_billings}, ${prior_year_costs},
           ${is_prior_locked}
         )

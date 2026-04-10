@@ -131,6 +131,8 @@ export async function PUT(
           UPDATE wip_line_items SET
             revised_contract = ${item.revised_contract as number},
             est_total_cost   = ${item.est_total_cost as number},
+            cp_costs         = ${(item.cp_costs ?? 0) as number},
+            cp_billings      = ${(item.cp_billings ?? 0) as number},
             costs_to_date    = ${item.costs_to_date as number},
             billings_to_date = ${item.billings_to_date as number},
             pm_pct_override  = ${(item.pm_pct_override ?? null) as number | null},

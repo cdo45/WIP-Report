@@ -28,6 +28,10 @@ export interface LineItemWithJob {
   est_total_cost: number;
   costs_to_date: number;
   billings_to_date: number;
+  cp_costs: number;
+  cp_billings: number;
+  prior_itd_costs: number;
+  prior_itd_billings: number;
   pm_pct_override: number | null;
   prior_year_earned: number;
   prior_year_billings: number;
