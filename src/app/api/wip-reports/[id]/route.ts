@@ -134,20 +134,20 @@ export async function PUT(
     }
 
     for (const item of lineItems as Record<string, unknown>[]) {
-      const params = {
-        id: item.id,
-        report_id: reportId,
-        revised_contract: item.revised_contract,
-        est_total_cost: item.est_total_cost,
-        costs_to_date: item.costs_to_date,
-        billings_to_date: item.billings_to_date,
-        pm_pct_override: item.pm_pct_override ?? null,
-        notes: item.notes ?? null,
-        prior_year_earned: item.prior_year_earned,
+      // Log all values being written so failures are visible in Vercel logs
+      console.log(`UPDATE wip_line_items id=${item.id} report_id=${reportId}:`, JSON.stringify({
+        revised_contract:    item.revised_contract,
+        est_total_cost:      item.est_total_cost,
+        cp_costs:            item.cp_costs ?? 0,
+        cp_billings:         item.cp_billings ?? 0,
+        costs_to_date:       item.costs_to_date,
+        billings_to_date:    item.billings_to_date,
+        pm_pct_override:     item.pm_pct_override ?? null,
+        notes:               item.notes ?? null,
+        prior_year_earned:   item.prior_year_earned,
         prior_year_billings: item.prior_year_billings,
-        prior_year_costs: item.prior_year_costs,
-      };
-      console.log("UPDATE params:", JSON.stringify(params));
+        prior_year_costs:    item.prior_year_costs,
+      }));
 
       // Main fields — try with revised_contract/est_total_cost first,
       // fall back without them if the columns haven't been migrated yet.
