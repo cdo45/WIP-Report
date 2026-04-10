@@ -55,15 +55,15 @@ export default function EditJobClient({ job }: { job: Job }) {
   };
 
   return (
-    <div className="min-h-screen bg-[#1F3864] text-white px-4 py-10">
+    <div className="px-4 py-10">
       <div className="max-w-2xl mx-auto">
-        <h1 className="text-3xl font-bold mb-2 text-[#C9A84C]">Edit Job</h1>
-        <p className="text-gray-400 mb-8">
+        <h1 className="text-3xl font-bold mb-2 text-[#1A1A1A]">Edit Job</h1>
+        <p className="text-[#6B7280] mb-8">
           {job.job_number} &mdash; {job.job_name}
         </p>
 
         {error && (
-          <div className="mb-6 bg-red-900/50 border border-red-600 text-red-200 px-4 py-3 rounded">
+          <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
             {error}
           </div>
         )}

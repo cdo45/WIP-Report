@@ -39,7 +39,7 @@ export default async function JobsPage() {
           <h1 className="text-2xl font-bold">Jobs</h1>
           <Link
             href="/jobs/new"
-            className="bg-[#C9A84C] hover:bg-[#b8953e] text-[#1F3864] font-bold px-5 py-2 rounded transition-colors"
+            className="bg-[#1B2A4A] hover:bg-[#243d70] text-white font-bold px-5 py-2 rounded transition-colors"
           >
             + New Job
           </Link>

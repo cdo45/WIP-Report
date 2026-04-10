@@ -107,16 +107,16 @@ function DeltaCell({
 }) {
   if (priorVal === undefined) {
     return (
-      <td className="px-2 py-1.5 whitespace-nowrap text-xs text-right text-gray-500">—</td>
+      <td className="px-2 py-1.5 whitespace-nowrap text-xs text-right text-gray-400">—</td>
     );
   }
   const delta = current - priorVal;
   const color =
     delta === 0
-      ? "text-gray-500"
+      ? "text-gray-400"
       : (delta > 0) === positiveIsGood
-      ? "text-green-400"
-      : "text-red-400";
+      ? "text-[#16A34A]"
+      : "text-[#B22234]";
   const sign = delta > 0 ? "+" : delta < 0 ? "-" : "";
   return (
     <td className={`px-2 py-1.5 whitespace-nowrap text-xs text-right font-mono ${color}`}>
@@ -320,10 +320,10 @@ export default function WipEditor({
   const netAdj  = adj1290 + adj2030;
 
   // ── Styles ────────────────────────────────────────────────────────────────
-  const th = "px-2 py-2.5 text-left text-xs font-semibold whitespace-nowrap text-[#C9A84C] bg-[#0f1e38]";
-  const td = "px-2 py-1.5 whitespace-nowrap text-xs text-right text-gray-200";
-  const tdL = "px-2 py-1.5 whitespace-nowrap text-xs";
-  const inp = "w-full bg-[#162a50] border border-[#2e4a7a] text-white text-right rounded px-2 py-0.5 text-xs focus:outline-none focus:border-[#C9A84C]";
+  const th = "px-2 py-2.5 text-left text-xs font-semibold whitespace-nowrap text-white bg-[#1B2A4A]";
+  const td = "px-2 py-1.5 whitespace-nowrap text-xs text-right text-[#1A1A1A]";
+  const tdL = "px-2 py-1.5 whitespace-nowrap text-xs text-[#1A1A1A]";
+  const inp = "w-full bg-white border border-[#E5E7EB] text-[#1A1A1A] text-right rounded px-2 py-0.5 text-xs focus:outline-none focus:border-[#1B2A4A]";
   const COLS = 24;
 
   // Final render sort — numeric dash-split: 2024-07 < 2025-01 < 2025-05
@@ -341,27 +341,27 @@ export default function WipEditor({
         {/* ── Header ─────────────────────────────────────────────────────── */}
         <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
           <div>
-            <Link href="/wip" className="text-xs text-gray-400 hover:text-[#C9A84C] mb-1 inline-block">
+            <Link href="/wip" className="text-xs text-[#6B7280] hover:text-[#1B2A4A] mb-1 inline-block">
               ← WIP Reports
             </Link>
-            <h1 className="text-2xl font-bold">
+            <h1 className="text-2xl font-bold text-[#1A1A1A]">
               WIP Report{" "}
-              <span className="text-[#C9A84C]">{toDateStr(report.period_date)}</span>
+              <span className="text-[#1B2A4A]">{toDateStr(report.period_date)}</span>
             </h1>
           </div>
           <div className="flex items-center gap-4 pt-1">
-            {saving && <span className="text-xs text-gray-400">Saving…</span>}
-            {!saving && saveStatus === "saved"  && <span className="text-xs text-green-400">Saved</span>}
-            {!saving && saveStatus === "error"  && <span className="text-xs text-red-400">Save failed</span>}
+            {saving && <span className="text-xs text-[#6B7280]">Saving…</span>}
+            {!saving && saveStatus === "saved"  && <span className="text-xs text-[#16A34A]">Saved</span>}
+            {!saving && saveStatus === "error"  && <span className="text-xs text-[#B22234]">Save failed</span>}
             {isFinalized ? (
-              <span className="bg-blue-900 text-blue-300 px-3 py-1 rounded text-sm font-semibold">
+              <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded text-sm font-semibold">
                 Finalized
               </span>
             ) : (
               <button
                 onClick={handleFinalize}
                 disabled={finalizing}
-                className="bg-[#C9A84C] hover:bg-[#b8953e] disabled:opacity-50 text-[#1F3864] font-bold px-5 py-2 rounded transition-colors"
+                className="bg-[#D97706] hover:bg-[#B45309] disabled:opacity-50 text-white font-bold px-5 py-2 rounded transition-colors"
               >
                 {finalizing ? "Finalizing…" : "Finalize Report"}
               </button>
@@ -370,7 +370,7 @@ export default function WipEditor({
         </div>
 
         {/* ── Main table ─────────────────────────────────────────────────── */}
-        <div className="overflow-x-auto rounded-lg border border-[#2e4a7a] mb-8">
+        <div className="overflow-x-auto rounded-lg border border-[#E5E7EB] mb-8">
           <table className="text-sm border-collapse" style={{ minWidth: "max-content" }}>
             <thead>
               <tr>
@@ -413,14 +413,14 @@ export default function WipEditor({
                   },
                   i
                 ) => {
-                  const rowBg    = i % 2 === 0 ? "bg-[#1a3260]" : "bg-[#1F3864]";
-                  const stickyBg = i % 2 === 0 ? "bg-[#1a3260]" : "bg-[#1F3864]";
-                  const ouColor  = overUnder >= 0 ? "text-green-400" : "text-red-400";
+                  const rowBg    = i % 2 === 0 ? "bg-white" : "bg-[#F9FAFB]";
+                  const stickyBg = i % 2 === 0 ? "bg-white" : "bg-[#F9FAFB]";
+                  const ouColor  = overUnder >= 0 ? "text-[#16A34A]" : "text-[#B22234]";
                   const priorOpen = expandedPrior.has(item.id);
 
                   return (
                     <Fragment key={item.id}>
-                      <tr className={`${rowBg} hover:bg-[#243d70] transition-colors`}>
+                      <tr className={`${rowBg} hover:bg-[#F3F4F6] transition-colors`}>
                         {/* Sticky: Job # */}
                         <td className={`${tdL} sticky left-0 z-10 ${stickyBg} font-mono`}>
                           {item.job_number}
@@ -489,7 +489,7 @@ export default function WipEditor({
                               />
                             )
                           ) : (
-                            <span className={`${td} text-gray-600`}>—</span>
+                            <span className={`${td} text-gray-400`}>—</span>
                           )}
                         </td>
 
@@ -507,7 +507,7 @@ export default function WipEditor({
                               />
                             )
                           ) : (
-                            <span className={`${td} text-gray-600`}>—</span>
+                            <span className={`${td} text-gray-400`}>—</span>
                           )}
                         </td>
 
@@ -578,7 +578,7 @@ export default function WipEditor({
                         {/* Notes */}
                         <td className="px-1 py-0.5">
                           {isFinalized ? (
-                            <span className="text-xs text-gray-300 whitespace-nowrap">
+                            <span className="text-xs text-[#6B7280] whitespace-nowrap">
                               {editable.notes || "—"}
                             </span>
                           ) : (
@@ -587,7 +587,7 @@ export default function WipEditor({
                               value={editable.notes}
                               onChange={(e) => handleChange(item.id, "notes", e.target.value)}
                               placeholder="—"
-                              className="w-full bg-[#162a50] border border-[#2e4a7a] text-white rounded px-2 py-0.5 text-xs focus:outline-none focus:border-[#C9A84C]"
+                              className="w-full bg-white border border-[#E5E7EB] text-[#1A1A1A] rounded px-2 py-0.5 text-xs focus:outline-none focus:border-[#1B2A4A]"
                             />
                           )}
                         </td>
@@ -597,7 +597,7 @@ export default function WipEditor({
                           <button
                             onClick={() => togglePrior(item.id)}
                             title="Toggle prior year"
-                            className="text-xs text-[#C9A84C] hover:text-[#b8953e] font-bold px-1"
+                            className="text-xs text-[#1B2A4A] hover:text-[#243d70] font-bold px-1"
                           >
                             {priorOpen ? "▼" : "▶"}
                           </button>
@@ -606,13 +606,13 @@ export default function WipEditor({
 
                       {/* Prior year expanded row */}
                       {priorOpen && (
-                        <tr className="bg-[#0f1e38] border-t border-b border-[#2e4a7a]">
+                        <tr className="bg-[#F9FAFB] border-t border-b border-[#E5E7EB]">
                           <td colSpan={COLS} className="px-5 py-3">
                             <div className="flex flex-wrap items-end gap-6">
-                              <span className="text-xs text-gray-500 font-semibold uppercase tracking-wider">
+                              <span className="text-xs text-[#6B7280] font-semibold uppercase tracking-wider">
                                 Prior Year
                                 {item.is_prior_locked && (
-                                  <span className="ml-2 text-yellow-500 normal-case">● locked</span>
+                                  <span className="ml-2 text-amber-600 normal-case">● locked</span>
                                 )}
                               </span>
 
@@ -624,9 +624,9 @@ export default function WipEditor({
                                 ] as const
                               ).map(([field, label]) => (
                                 <div key={field}>
-                                  <div className="text-xs text-gray-400 mb-1">{label}</div>
+                                  <div className="text-xs text-[#6B7280] mb-1">{label}</div>
                                   {item.is_prior_locked || isFinalized ? (
-                                    <span className="text-xs text-gray-300 font-mono">
+                                    <span className="text-xs text-[#1A1A1A] font-mono">
                                       ${fmt$(toNum(editable[field]))}
                                     </span>
                                   ) : (
@@ -634,7 +634,7 @@ export default function WipEditor({
                                       type="text"
                                       value={editable[field]}
                                       onChange={(e) => handleChange(item.id, field, e.target.value)}
-                                      className="w-36 bg-[#162a50] border border-[#2e4a7a] text-white rounded px-2 py-1 text-xs focus:outline-none focus:border-[#C9A84C] text-right"
+                                      className="w-36 bg-white border border-[#E5E7EB] text-[#1A1A1A] rounded px-2 py-1 text-xs focus:outline-none focus:border-[#1B2A4A] text-right"
                                     />
                                   )}
                                 </div>
@@ -654,51 +654,51 @@ export default function WipEditor({
         {/* ── Summary panels ─────────────────────────────────────────────── */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
           {/* Billings position */}
-          <div className="bg-[#162a50] rounded-lg border border-[#2e4a7a] p-5">
-            <h2 className="text-[#C9A84C] font-semibold mb-4">Billings Position</h2>
+          <div className="bg-white rounded-lg border border-[#E5E7EB] shadow-sm p-5">
+            <h2 className="text-[#1B2A4A] font-semibold mb-4">Billings Position</h2>
             <dl className="space-y-2 text-sm">
               <div className="flex justify-between">
-                <dt className="text-gray-300">
+                <dt className="text-[#374151]">
                   Underbillings{" "}
-                  <span className="text-gray-500 text-xs">(Asset — Acct 1290)</span>
+                  <span className="text-[#6B7280] text-xs">(Asset — Acct 1290)</span>
                 </dt>
-                <dd className="font-mono text-green-400 font-semibold">${fmt$(totalUnderbillings)}</dd>
+                <dd className="font-mono text-[#16A34A] font-semibold">${fmt$(totalUnderbillings)}</dd>
               </div>
               <div className="flex justify-between">
-                <dt className="text-gray-300">
+                <dt className="text-[#374151]">
                   Overbillings{" "}
-                  <span className="text-gray-500 text-xs">(Liability — Acct 2030)</span>
+                  <span className="text-[#6B7280] text-xs">(Liability — Acct 2030)</span>
                 </dt>
-                <dd className="font-mono text-red-400 font-semibold">${fmt$(totalOverbillings)}</dd>
+                <dd className="font-mono text-[#B22234] font-semibold">${fmt$(totalOverbillings)}</dd>
               </div>
-              <div className="flex justify-between border-t border-[#2e4a7a] pt-2">
-                <dt className="font-semibold">Net Over/Under</dt>
-                <dd className={`font-mono font-semibold ${netOverUnder >= 0 ? "text-green-400" : "text-red-400"}`}>
+              <div className="flex justify-between border-t border-[#E5E7EB] pt-2">
+                <dt className="font-semibold text-[#1A1A1A]">Net Over/Under</dt>
+                <dd className={`font-mono font-semibold ${netOverUnder >= 0 ? "text-[#16A34A]" : "text-[#B22234]"}`}>
                   {netOverUnder >= 0 ? "+" : ""}${fmt$(netOverUnder)}
                 </dd>
               </div>
               <div className="flex justify-between">
-                <dt className="text-gray-300">Total Backlog</dt>
-                <dd className="font-mono text-white">${fmt$(totalBacklog)}</dd>
+                <dt className="text-[#374151]">Total Backlog</dt>
+                <dd className="font-mono text-[#1A1A1A]">${fmt$(totalBacklog)}</dd>
               </div>
             </dl>
           </div>
 
           {/* Current year */}
-          <div className="bg-[#162a50] rounded-lg border border-[#2e4a7a] p-5">
-            <h2 className="text-[#C9A84C] font-semibold mb-4">Current Year</h2>
+          <div className="bg-white rounded-lg border border-[#E5E7EB] shadow-sm p-5">
+            <h2 className="text-[#1B2A4A] font-semibold mb-4">Current Year</h2>
             <dl className="space-y-2 text-sm">
               <div className="flex justify-between">
-                <dt className="text-gray-300">CY Revenue</dt>
-                <dd className="font-mono text-white">${fmt$(totalCyRevenue)}</dd>
+                <dt className="text-[#374151]">CY Revenue</dt>
+                <dd className="font-mono text-[#1A1A1A]">${fmt$(totalCyRevenue)}</dd>
               </div>
               <div className="flex justify-between">
-                <dt className="text-gray-300">CY Costs</dt>
-                <dd className="font-mono text-white">${fmt$(totalCyCosts)}</dd>
+                <dt className="text-[#374151]">CY Costs</dt>
+                <dd className="font-mono text-[#1A1A1A]">${fmt$(totalCyCosts)}</dd>
               </div>
-              <div className="flex justify-between border-t border-[#2e4a7a] pt-2">
-                <dt className="font-semibold">CY Gross Profit</dt>
-                <dd className={`font-mono font-semibold ${totalCyGp >= 0 ? "text-green-400" : "text-red-400"}`}>
+              <div className="flex justify-between border-t border-[#E5E7EB] pt-2">
+                <dt className="font-semibold text-[#1A1A1A]">CY Gross Profit</dt>
+                <dd className={`font-mono font-semibold ${totalCyGp >= 0 ? "text-[#16A34A]" : "text-[#B22234]"}`}>
                   ${fmt$(totalCyGp)}
                 </dd>
               </div>
@@ -707,44 +707,44 @@ export default function WipEditor({
         </div>
 
         {/* ── Journal entry ──────────────────────────────────────────────── */}
-        <div className="bg-[#162a50] rounded-lg border border-[#2e4a7a] p-5 mb-6">
-          <h2 className="text-[#C9A84C] font-semibold mb-4">Auto-Generated Journal Entry</h2>
+        <div className="bg-white rounded-lg border border-[#E5E7EB] shadow-sm p-5 mb-6">
+          <h2 className="text-[#1B2A4A] font-semibold mb-4">Auto-Generated Journal Entry</h2>
 
           {/* Reconciliation table */}
           <div className="overflow-x-auto mb-5">
             <table className="w-full text-xs">
               <thead>
-                <tr className="border-b border-[#2e4a7a]">
-                  <th className="text-left py-2 pr-6 text-gray-400 font-semibold">Account</th>
-                  <th className="text-right py-2 px-4 text-gray-400 font-semibold">Current Balance</th>
-                  <th className="text-right py-2 px-4 text-gray-400 font-semibold">Should Be</th>
-                  <th className="text-right py-2 pl-4 text-gray-400 font-semibold">Adjustment</th>
+                <tr className="border-b border-[#E5E7EB]">
+                  <th className="text-left py-2 pr-6 text-[#6B7280] font-semibold">Account</th>
+                  <th className="text-right py-2 px-4 text-[#6B7280] font-semibold">Current Balance</th>
+                  <th className="text-right py-2 px-4 text-[#6B7280] font-semibold">Should Be</th>
+                  <th className="text-right py-2 pl-4 text-[#6B7280] font-semibold">Adjustment</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[#243d70]">
+              <tbody className="divide-y divide-[#E5E7EB]">
                 <tr>
-                  <td className="py-2 pr-6 text-gray-300">1290 Costs in Excess</td>
-                  <td className="py-2 px-4 text-right font-mono text-gray-200">${fmt$(gl1290Num)}</td>
-                  <td className="py-2 px-4 text-right font-mono text-green-400">${fmt$(totalUnderbillings)}</td>
-                  <td className={`py-2 pl-4 text-right font-mono font-semibold ${adj1290 >= 0 ? "text-green-400" : "text-red-400"}`}>
+                  <td className="py-2 pr-6 text-[#374151]">1290 Costs in Excess</td>
+                  <td className="py-2 px-4 text-right font-mono text-[#1A1A1A]">${fmt$(gl1290Num)}</td>
+                  <td className="py-2 px-4 text-right font-mono text-[#16A34A]">${fmt$(totalUnderbillings)}</td>
+                  <td className={`py-2 pl-4 text-right font-mono font-semibold ${adj1290 >= 0 ? "text-[#16A34A]" : "text-[#B22234]"}`}>
                     {adj1290 >= 0 ? "+" : "-"}${fmt$(Math.abs(adj1290))}
                   </td>
                 </tr>
                 <tr>
-                  <td className="py-2 pr-6 text-gray-300">2030 Billings in Excess</td>
-                  <td className="py-2 px-4 text-right font-mono text-gray-200">
+                  <td className="py-2 pr-6 text-[#374151]">2030 Billings in Excess</td>
+                  <td className="py-2 px-4 text-right font-mono text-[#1A1A1A]">
                     {gl2030Num < 0 ? "-" : ""}${fmt$(Math.abs(gl2030Num))}
                   </td>
-                  <td className="py-2 px-4 text-right font-mono text-red-400">-${fmt$(totalOverbillings)}</td>
-                  <td className={`py-2 pl-4 text-right font-mono font-semibold ${adj2030 >= 0 ? "text-green-400" : "text-red-400"}`}>
+                  <td className="py-2 px-4 text-right font-mono text-[#B22234]">-${fmt$(totalOverbillings)}</td>
+                  <td className={`py-2 pl-4 text-right font-mono font-semibold ${adj2030 >= 0 ? "text-[#16A34A]" : "text-[#B22234]"}`}>
                     {adj2030 >= 0 ? "+" : "-"}${fmt$(Math.abs(adj2030))}
                   </td>
                 </tr>
-                <tr className="border-t-2 border-[#2e4a7a]">
-                  <td className="py-2 pr-6 text-gray-300">401510 WIP Revenue</td>
-                  <td className="py-2 px-4 text-right font-mono text-gray-500">—</td>
-                  <td className="py-2 px-4 text-right font-mono text-gray-500">—</td>
-                  <td className={`py-2 pl-4 text-right font-mono font-bold ${netAdj >= 0 ? "text-green-400" : "text-red-400"}`}>
+                <tr className="border-t-2 border-[#E5E7EB]">
+                  <td className="py-2 pr-6 text-[#374151]">401510 WIP Revenue</td>
+                  <td className="py-2 px-4 text-right font-mono text-[#9CA3AF]">—</td>
+                  <td className="py-2 px-4 text-right font-mono text-[#9CA3AF]">—</td>
+                  <td className={`py-2 pl-4 text-right font-mono font-bold ${netAdj >= 0 ? "text-[#16A34A]" : "text-[#B22234]"}`}>
                     {netAdj >= 0 ? "+" : "-"}${fmt$(Math.abs(netAdj))}
                   </td>
                 </tr>
@@ -757,66 +757,66 @@ export default function WipEditor({
             {adj1290 > 0 && (
               <>
                 <div className="flex gap-6">
-                  <span className="text-gray-400 w-6">DR</span>
-                  <span className="flex-1">1290 Costs in Excess of Billings</span>
-                  <span className="text-green-400">${fmt$(adj1290)}</span>
+                  <span className="text-[#6B7280] w-6">DR</span>
+                  <span className="flex-1 text-[#1A1A1A]">1290 Costs in Excess of Billings</span>
+                  <span className="text-[#16A34A]">${fmt$(adj1290)}</span>
                 </div>
                 <div className="flex gap-6">
-                  <span className="text-gray-400 w-6">CR</span>
-                  <span className="flex-1">401510 WIP Revenue Recognized</span>
-                  <span className="text-green-400">${fmt$(adj1290)}</span>
+                  <span className="text-[#6B7280] w-6">CR</span>
+                  <span className="flex-1 text-[#1A1A1A]">401510 WIP Revenue Recognized</span>
+                  <span className="text-[#16A34A]">${fmt$(adj1290)}</span>
                 </div>
               </>
             )}
             {adj1290 < 0 && (
               <>
                 <div className="flex gap-6">
-                  <span className="text-gray-400 w-6">DR</span>
-                  <span className="flex-1">401510 WIP Revenue Recognized</span>
-                  <span className="text-red-400">${fmt$(Math.abs(adj1290))}</span>
+                  <span className="text-[#6B7280] w-6">DR</span>
+                  <span className="flex-1 text-[#1A1A1A]">401510 WIP Revenue Recognized</span>
+                  <span className="text-[#B22234]">${fmt$(Math.abs(adj1290))}</span>
                 </div>
                 <div className="flex gap-6">
-                  <span className="text-gray-400 w-6">CR</span>
-                  <span className="flex-1">1290 Costs in Excess of Billings</span>
-                  <span className="text-red-400">${fmt$(Math.abs(adj1290))}</span>
+                  <span className="text-[#6B7280] w-6">CR</span>
+                  <span className="flex-1 text-[#1A1A1A]">1290 Costs in Excess of Billings</span>
+                  <span className="text-[#B22234]">${fmt$(Math.abs(adj1290))}</span>
                 </div>
               </>
             )}
             {adj2030 > 0 && (
               <>
                 <div className={`flex gap-6${adj1290 !== 0 ? " mt-2" : ""}`}>
-                  <span className="text-gray-400 w-6">DR</span>
-                  <span className="flex-1">2030 Billings in Excess of Costs</span>
-                  <span className="text-green-400">${fmt$(adj2030)}</span>
+                  <span className="text-[#6B7280] w-6">DR</span>
+                  <span className="flex-1 text-[#1A1A1A]">2030 Billings in Excess of Costs</span>
+                  <span className="text-[#16A34A]">${fmt$(adj2030)}</span>
                 </div>
                 <div className="flex gap-6">
-                  <span className="text-gray-400 w-6">CR</span>
-                  <span className="flex-1">401510 WIP Revenue Recognized</span>
-                  <span className="text-green-400">${fmt$(adj2030)}</span>
+                  <span className="text-[#6B7280] w-6">CR</span>
+                  <span className="flex-1 text-[#1A1A1A]">401510 WIP Revenue Recognized</span>
+                  <span className="text-[#16A34A]">${fmt$(adj2030)}</span>
                 </div>
               </>
             )}
             {adj2030 < 0 && (
               <>
                 <div className={`flex gap-6${adj1290 !== 0 ? " mt-2" : ""}`}>
-                  <span className="text-gray-400 w-6">DR</span>
-                  <span className="flex-1">401510 WIP Revenue Recognized</span>
-                  <span className="text-red-400">${fmt$(Math.abs(adj2030))}</span>
+                  <span className="text-[#6B7280] w-6">DR</span>
+                  <span className="flex-1 text-[#1A1A1A]">401510 WIP Revenue Recognized</span>
+                  <span className="text-[#B22234]">${fmt$(Math.abs(adj2030))}</span>
                 </div>
                 <div className="flex gap-6">
-                  <span className="text-gray-400 w-6">CR</span>
-                  <span className="flex-1">2030 Billings in Excess of Costs</span>
-                  <span className="text-red-400">${fmt$(Math.abs(adj2030))}</span>
+                  <span className="text-[#6B7280] w-6">CR</span>
+                  <span className="flex-1 text-[#1A1A1A]">2030 Billings in Excess of Costs</span>
+                  <span className="text-[#B22234]">${fmt$(Math.abs(adj2030))}</span>
                 </div>
               </>
             )}
             {adj1290 === 0 && adj2030 === 0 && (
-              <span className="text-gray-500 italic">No adjustments needed.</span>
+              <span className="text-[#9CA3AF] italic">No adjustments needed.</span>
             )}
-            <div className="flex gap-6 border-t border-[#2e4a7a] pt-2 mt-2">
-              <span className="text-gray-500 w-6" />
-              <span className="text-gray-400 flex-1">Net P&amp;L Impact</span>
-              <span className={netAdj >= 0 ? "text-green-400" : "text-red-400"}>
+            <div className="flex gap-6 border-t border-[#E5E7EB] pt-2 mt-2">
+              <span className="text-[#9CA3AF] w-6" />
+              <span className="text-[#6B7280] flex-1">Net P&amp;L Impact</span>
+              <span className={netAdj >= 0 ? "text-[#16A34A]" : "text-[#B22234]"}>
                 {netAdj >= 0 ? "+" : "-"}${fmt$(Math.abs(netAdj))}
               </span>
             </div>
@@ -824,26 +824,26 @@ export default function WipEditor({
         </div>
 
         {/* ── GL Reconciliation ──────────────────────────────────────────── */}
-        <div className="bg-[#162a50] rounded-lg border border-[#2e4a7a] p-5 mb-8">
-          <h2 className="text-[#C9A84C] font-semibold mb-4">GL Reconciliation</h2>
+        <div className="bg-white rounded-lg border border-[#E5E7EB] shadow-sm p-5 mb-8">
+          <h2 className="text-[#1B2A4A] font-semibold mb-4">GL Reconciliation</h2>
           <div className="flex flex-wrap gap-8">
             <div>
-              <div className="text-xs text-gray-400 mb-1.5">Current GL Balance — 1290 Costs in Excess</div>
+              <div className="text-xs text-[#6B7280] mb-1.5">Current GL Balance — 1290 Costs in Excess</div>
               {isFinalized ? (
-                <span className="text-sm font-mono text-gray-200">${fmt$(gl1290Num)}</span>
+                <span className="text-sm font-mono text-[#1A1A1A]">${fmt$(gl1290Num)}</span>
               ) : (
                 <input
                   type="text"
                   value={gl1290Str}
                   onChange={(e) => handleGlChange("1290", e.target.value)}
-                  className="w-48 bg-[#0f1e38] border border-[#2e4a7a] text-white rounded px-3 py-1.5 text-sm focus:outline-none focus:border-[#C9A84C] text-right"
+                  className="w-48 bg-white border border-[#E5E7EB] text-[#1A1A1A] rounded px-3 py-1.5 text-sm focus:outline-none focus:border-[#1B2A4A] text-right"
                 />
               )}
             </div>
             <div>
-              <div className="text-xs text-gray-400 mb-1.5">Current GL Balance — 2030 Billings in Excess</div>
+              <div className="text-xs text-[#6B7280] mb-1.5">Current GL Balance — 2030 Billings in Excess</div>
               {isFinalized ? (
-                <span className="text-sm font-mono text-gray-200">
+                <span className="text-sm font-mono text-[#1A1A1A]">
                   {gl2030Num < 0 ? "-" : ""}${fmt$(Math.abs(gl2030Num))}
                 </span>
               ) : (
@@ -851,13 +851,13 @@ export default function WipEditor({
                   type="text"
                   value={gl2030Str}
                   onChange={(e) => handleGlChange("2030", e.target.value)}
-                  className="w-48 bg-[#0f1e38] border border-[#2e4a7a] text-white rounded px-3 py-1.5 text-sm focus:outline-none focus:border-[#C9A84C] text-right"
+                  className="w-48 bg-white border border-[#E5E7EB] text-[#1A1A1A] rounded px-3 py-1.5 text-sm focus:outline-none focus:border-[#1B2A4A] text-right"
                 />
               )}
             </div>
           </div>
           {!isFinalized && (
-            <p className="text-xs text-gray-500 mt-3">
+            <p className="text-xs text-[#9CA3AF] mt-3">
               Enter the current GL balance for each account. For 2030 (credit/liability), enter a negative value (e.g., -12,500.00).
             </p>
           )}
@@ -869,7 +869,7 @@ export default function WipEditor({
             <button
               onClick={handleFinalize}
               disabled={finalizing}
-              className="bg-[#C9A84C] hover:bg-[#b8953e] disabled:opacity-50 text-[#1F3864] font-bold px-6 py-2.5 rounded transition-colors"
+              className="bg-[#D97706] hover:bg-[#B45309] disabled:opacity-50 text-white font-bold px-6 py-2.5 rounded transition-colors"
             >
               {finalizing ? "Finalizing…" : "Finalize Report"}
             </button>

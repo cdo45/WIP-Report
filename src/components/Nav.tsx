@@ -17,7 +17,7 @@ export default function Nav() {
   }
 
   return (
-    <nav className="bg-[#151E33] border-b border-[#2e4a7a]">
+    <nav className="bg-[#1A1A1A] border-b border-[#2A2A2A]">
       <div className="max-w-screen-xl mx-auto px-4 h-14 flex items-center justify-between">
         <span className="text-white font-bold text-lg tracking-wide">
           Vance Corp
@@ -27,10 +27,10 @@ export default function Nav() {
             <Link
               key={href}
               href={href}
-              className={`text-sm font-medium transition-colors ${
+              className={`text-sm font-medium transition-colors pb-0.5 ${
                 isActive(href)
-                  ? "text-[#C9A84C]"
-                  : "text-white hover:text-[#C9A84C]"
+                  ? "text-white border-b-2 border-[#C9A84C]"
+                  : "text-[#A1A1AA] hover:text-white"
               }`}
             >
               {label}
