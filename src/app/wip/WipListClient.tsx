@@ -161,6 +161,14 @@ export default function WipListClient({
                         >
                           {r.status === "draft" ? "Edit" : "View"}
                         </Link>
+                        {r.status !== "draft" && (
+                          <Link
+                            href={`/wip/${r.id}?edit=1`}
+                            className="text-xs border border-[#D97706] text-[#D97706] hover:bg-[#D97706]/10 px-3 py-1 rounded transition-colors"
+                          >
+                            Edit
+                          </Link>
+                        )}
                         {r.status === "draft" && (
                           <button
                             onClick={() => handleDeleteReport(r.id, r.period_date)}

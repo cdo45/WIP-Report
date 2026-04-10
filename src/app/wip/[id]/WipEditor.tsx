@@ -127,14 +127,48 @@ function DeltaCell({
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
+interface AuditEntry {
+  id: number;
+  job_number: string;
+  field_name: string;
+  old_value: string | null;
+  new_value: string | null;
+  changed_at: string;
+}
+
+interface SnapshotMeta {
+  id: number;
+  created_at: string;
+  reason: string;
+}
+
+const FIELD_LABELS: Record<string, string> = {
+  revised_contract:    "Revised Contract",
+  est_total_cost:      "Est. Total Cost",
+  cp_costs:            "CP Costs",
+  cp_billings:         "CP Billings",
+  costs_to_date:       "Costs ITD",
+  billings_to_date:    "Billings ITD",
+  pm_pct_override:     "PM% Override",
+  notes:               "Notes",
+  prior_year_earned:   "Prior Year Earned",
+  prior_year_billings: "Prior Year Billings",
+  prior_year_costs:    "Prior Year Costs",
+  prior_balance_1290:  "GL Balance 1290",
+  prior_balance_2030:  "GL Balance 2030",
+  snapshot_restore:    "Snapshot Restore",
+};
+
 export default function WipEditor({
   report,
   initialLineItems,
   priorValues,
+  autoEdit = false,
 }: {
   report: WipReport;
   initialLineItems: LineItemWithJob[];
   priorValues: PriorValues;
+  autoEdit?: boolean;
 }) {
   const router = useRouter();
   const isFinalized = report.status === "final";
@@ -176,6 +210,19 @@ export default function WipEditor({
 
   useEffect(() => () => { if (saveTimer.current) clearTimeout(saveTimer.current); }, []);
 
+  const [editingFinalized, setEditingFinalized] = useState(false);
+  const [enteringEdit, setEnteringEdit] = useState(false);
+  const [reFinalizing, setReFinalizing] = useState(false);
+  const [auditEntries, setAuditEntries] = useState<AuditEntry[]>([]);
+  const [auditLoaded, setAuditLoaded] = useState(false);
+  const [auditExpanded, setAuditExpanded] = useState(false);
+  const [snapshots, setSnapshots] = useState<SnapshotMeta[]>([]);
+  const [snapshotsLoaded, setSnapshotsLoaded] = useState(false);
+  const [snapshotsExpanded, setSnapshotsExpanded] = useState(false);
+  const hasAutoEdited = useRef(false);
+
+  const isEditable = !isFinalized || editingFinalized;
+
   function buildPayload(state: Map<number, Editable>) {
     return Array.from(state.entries()).map(([id, f]) => {
       const item = sortedItems.find((i) => i.id === id);
@@ -206,7 +253,7 @@ export default function WipEditor({
     });
   }
 
-  async function doSave(state: Map<number, Editable>) {
+  async function doSave(state: Map<number, Editable>, isFinalizedEdit = false) {
     setSaving(true);
     try {
       const res = await fetch(`/api/wip-reports/${report.id}`, {
@@ -216,6 +263,7 @@ export default function WipEditor({
           lineItems: buildPayload(state),
           prior_balance_1290: toNum(gl1290Ref.current),
           prior_balance_2030: toNum(gl2030Ref.current),
+          is_finalized_edit: isFinalizedEdit,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -239,8 +287,10 @@ export default function WipEditor({
     setEditState((prev) => {
       const next = new Map(prev);
       next.set(itemId, { ...prev.get(itemId)!, [field]: formatted });
-      if (saveTimer.current) clearTimeout(saveTimer.current);
-      saveTimer.current = setTimeout(() => doSave(next), 1000);
+      if (!editingFinalized) {
+        if (saveTimer.current) clearTimeout(saveTimer.current);
+        saveTimer.current = setTimeout(() => doSave(next), 1000);
+      }
       return next;
     });
   }
@@ -255,8 +305,10 @@ export default function WipEditor({
       setGl2030Str(formatted);
       gl2030Ref.current = formatted;
     }
-    if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => doSave(editState), 1000);
+    if (!editingFinalized) {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      saveTimer.current = setTimeout(() => doSave(editState), 1000);
+    }
   }
 
   function togglePrior(itemId: number) {
@@ -286,6 +338,128 @@ export default function WipEditor({
       setFinalizing(false);
     }
   }
+
+  async function handleEnterEdit() {
+    setEnteringEdit(true);
+    try {
+      await fetch(`/api/wip-reports/${report.id}/snapshot`, { method: "POST" });
+      setSnapshotsLoaded(false);
+      setEditingFinalized(true);
+      setSaveStatus("");
+    } catch {
+      alert("Failed to take snapshot before editing.");
+    } finally {
+      setEnteringEdit(false);
+    }
+  }
+
+  function handleCancelEdit() {
+    const m = new Map<number, Editable>();
+    for (const item of sortedItems) {
+      m.set(item.id, {
+        revised_contract:    formatDollarInput(String(item.revised_contract ?? 0)),
+        est_total_cost:      formatDollarInput(String(item.est_total_cost ?? 0)),
+        costs_to_date:       formatDollarInput(String(item.costs_to_date ?? 0)),
+        billings_to_date:    formatDollarInput(String(item.billings_to_date ?? 0)),
+        cp_costs:            formatDollarInput(String(item.cp_costs ?? 0)),
+        cp_billings:         formatDollarInput(String(item.cp_billings ?? 0)),
+        pm_pct_override:     item.pm_pct_override != null ? String(item.pm_pct_override) : "",
+        prior_year_earned:   formatDollarInput(String(item.prior_year_earned ?? 0)),
+        prior_year_billings: formatDollarInput(String(item.prior_year_billings ?? 0)),
+        prior_year_costs:    formatDollarInput(String(item.prior_year_costs ?? 0)),
+        notes:               item.notes ?? "",
+      });
+    }
+    setEditState(m);
+    gl1290Ref.current = formatDollarInput(String(report.prior_balance_1290 ?? 0));
+    gl2030Ref.current = formatDollarInput(String(report.prior_balance_2030 ?? 0));
+    setGl1290Str(gl1290Ref.current);
+    setGl2030Str(gl2030Ref.current);
+    setEditingFinalized(false);
+    setSaveStatus("");
+  }
+
+  async function handleReFinalize() {
+    if (!confirm("Save all changes and keep this report finalized?\nAll changes will be logged to the audit trail.")) return;
+    setReFinalizing(true);
+    try {
+      const res = await fetch(`/api/wip-reports/${report.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          lineItems: buildPayload(editState),
+          prior_balance_1290: toNum(gl1290Ref.current),
+          prior_balance_2030: toNum(gl2030Ref.current),
+          is_finalized_edit: true,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      const success = res.ok && data.ok !== false;
+      if (success) {
+        setEditingFinalized(false);
+        setSaveStatus("saved");
+        loadAuditLog(true);
+      } else {
+        alert("Save failed. Check console for details.");
+        setSaveStatus("error");
+      }
+    } catch {
+      alert("Save failed.");
+      setSaveStatus("error");
+    } finally {
+      setReFinalizing(false);
+    }
+  }
+
+  async function loadAuditLog(force = false) {
+    if (auditLoaded && !force) return;
+    try {
+      const res = await fetch(`/api/wip-reports/${report.id}/audit`);
+      const data = await res.json();
+      setAuditEntries(Array.isArray(data) ? data : []);
+      setAuditLoaded(true);
+    } catch {
+      console.error("Failed to load audit log");
+    }
+  }
+
+  async function loadSnapshots() {
+    if (snapshotsLoaded) return;
+    try {
+      const res = await fetch(`/api/wip-reports/${report.id}/snapshots`);
+      const data = await res.json();
+      setSnapshots(Array.isArray(data) ? data : []);
+      setSnapshotsLoaded(true);
+    } catch {
+      console.error("Failed to load snapshots");
+    }
+  }
+
+  async function handleRestore(snapshotId: number) {
+    if (!confirm("Restore this snapshot? This will overwrite current values.")) return;
+    try {
+      const res = await fetch(
+        `/api/wip-reports/${report.id}/snapshots/${snapshotId}/restore`,
+        { method: "POST" }
+      );
+      if (res.ok) {
+        router.refresh();
+      } else {
+        alert("Failed to restore snapshot.");
+      }
+    } catch {
+      alert("Failed to restore snapshot.");
+    }
+  }
+
+  // Auto-enter edit mode when navigated with ?edit=1
+  useEffect(() => {
+    if (autoEdit && isFinalized && !hasAutoEdited.current) {
+      hasAutoEdited.current = true;
+      handleEnterEdit();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function handlePrint() {
     const dateStr = toDateStr(report.period_date);
@@ -664,11 +838,38 @@ ${fadedJobs.length > 0 ? `
             >
               Print Report
             </button>
-            {isFinalized ? (
-              <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded text-sm font-semibold">
-                Finalized
-              </span>
-            ) : (
+            {isFinalized && !editingFinalized && (
+              <>
+                <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded text-sm font-semibold">
+                  Finalized
+                </span>
+                <button
+                  onClick={handleEnterEdit}
+                  disabled={enteringEdit}
+                  className="border border-[#D97706] text-[#D97706] hover:bg-[#D97706]/10 disabled:opacity-50 px-4 py-2 rounded text-sm font-medium transition-colors"
+                >
+                  {enteringEdit ? "Opening…" : "Edit"}
+                </button>
+              </>
+            )}
+            {editingFinalized && (
+              <>
+                <button
+                  onClick={handleCancelEdit}
+                  className="border border-[#E5E7EB] text-[#6B7280] hover:border-[#1B2A4A] hover:text-[#1B2A4A] px-4 py-2 rounded text-sm font-medium transition-colors"
+                >
+                  Cancel Edit
+                </button>
+                <button
+                  onClick={handleReFinalize}
+                  disabled={reFinalizing}
+                  className="bg-[#D97706] hover:bg-[#B45309] disabled:opacity-50 text-white font-bold px-5 py-2 rounded transition-colors"
+                >
+                  {reFinalizing ? "Saving…" : "Save & Re-finalize"}
+                </button>
+              </>
+            )}
+            {!isFinalized && (
               <button
                 onClick={handleFinalize}
                 disabled={finalizing}
@@ -679,6 +880,14 @@ ${fadedJobs.length > 0 ? `
             )}
           </div>
         </div>
+
+        {/* ── Editing-finalized banner ────────────────────────────────────── */}
+        {editingFinalized && (
+          <div className="mb-4 flex items-center gap-3 bg-amber-50 border border-amber-300 text-amber-800 px-4 py-3 rounded-lg text-sm font-medium">
+            <span>⚠</span>
+            <span>EDITING FINALIZED REPORT — all changes will be logged to the audit trail when you Save &amp; Re-finalize.</span>
+          </div>
+        )}
 
         {/* ── Main table ─────────────────────────────────────────────────── */}
         <div className="overflow-x-auto rounded-lg border border-[#E5E7EB] mb-8">
@@ -743,7 +952,7 @@ ${fadedJobs.length > 0 ? `
 
                         {/* Editable: Rev Contract */}
                         <td className="px-1 py-0.5 whitespace-nowrap">
-                          {isFinalized ? (
+                          {!isEditable ? (
                             <span className={td}>${fmt$(revisedContract)}</span>
                           ) : (
                             <input
@@ -764,7 +973,7 @@ ${fadedJobs.length > 0 ? `
 
                         {/* Editable: Est Cost */}
                         <td className="px-1 py-0.5 whitespace-nowrap">
-                          {isFinalized ? (
+                          {!isEditable ? (
                             <span className={td}>${fmt$(estTotalCost)}</span>
                           ) : (
                             <input
@@ -789,7 +998,7 @@ ${fadedJobs.length > 0 ? `
                         {/* CP Costs — editable for locked rows, dash for unlocked */}
                         <td className="px-1 py-0.5 whitespace-nowrap">
                           {item.is_prior_locked ? (
-                            isFinalized ? (
+                            !isEditable ? (
                               <span className={td}>${fmt$(toNum(editable.cp_costs))}</span>
                             ) : (
                               <input
@@ -807,7 +1016,7 @@ ${fadedJobs.length > 0 ? `
                         {/* CP Billings — editable for locked rows, dash for unlocked */}
                         <td className="px-1 py-0.5 whitespace-nowrap">
                           {item.is_prior_locked ? (
-                            isFinalized ? (
+                            !isEditable ? (
                               <span className={td}>${fmt$(toNum(editable.cp_billings))}</span>
                             ) : (
                               <input
@@ -826,7 +1035,7 @@ ${fadedJobs.length > 0 ? `
                         <td className="px-1 py-0.5 whitespace-nowrap">
                           {item.is_prior_locked ? (
                             <span className={td}>${fmt$(costsToDate)}</span>
-                          ) : isFinalized ? (
+                          ) : !isEditable ? (
                             <span className={td}>${fmt$(toNum(editable.costs_to_date))}</span>
                           ) : (
                             <input
@@ -842,7 +1051,7 @@ ${fadedJobs.length > 0 ? `
                         <td className="px-1 py-0.5 whitespace-nowrap">
                           {item.is_prior_locked ? (
                             <span className={td}>${fmt$(billingsToDate)}</span>
-                          ) : isFinalized ? (
+                          ) : !isEditable ? (
                             <span className={td}>${fmt$(toNum(editable.billings_to_date))}</span>
                           ) : (
                             <input
@@ -859,7 +1068,7 @@ ${fadedJobs.length > 0 ? `
 
                         {/* Editable: PM Override */}
                         <td className="px-1 py-0.5 whitespace-nowrap">
-                          {isFinalized ? (
+                          {!isEditable ? (
                             <span className={td}>
                               {editable.pm_pct_override !== "" ? fmtPct(toNum(editable.pm_pct_override)) : "—"}
                             </span>
@@ -888,7 +1097,7 @@ ${fadedJobs.length > 0 ? `
 
                         {/* Notes */}
                         <td className="px-1 py-0.5">
-                          {isFinalized ? (
+                          {!isEditable ? (
                             <span className="text-xs text-[#6B7280] whitespace-nowrap">
                               {editable.notes || "—"}
                             </span>
@@ -936,7 +1145,7 @@ ${fadedJobs.length > 0 ? `
                               ).map(([field, label]) => (
                                 <div key={field}>
                                   <div className="text-xs text-[#6B7280] mb-1">{label}</div>
-                                  {item.is_prior_locked || isFinalized ? (
+                                  {item.is_prior_locked || !isEditable ? (
                                     <span className="text-xs text-[#1A1A1A] font-mono">
                                       ${fmt$(toNum(editable[field]))}
                                     </span>
@@ -1140,7 +1349,7 @@ ${fadedJobs.length > 0 ? `
           <div className="flex flex-wrap gap-8">
             <div>
               <div className="text-xs text-[#6B7280] mb-1.5">Current GL Balance — 1290 Costs in Excess</div>
-              {isFinalized ? (
+              {!isEditable ? (
                 <span className="text-sm font-mono text-[#1A1A1A]">${fmt$(gl1290Num)}</span>
               ) : (
                 <input
@@ -1153,7 +1362,7 @@ ${fadedJobs.length > 0 ? `
             </div>
             <div>
               <div className="text-xs text-[#6B7280] mb-1.5">Current GL Balance — 2030 Billings in Excess</div>
-              {isFinalized ? (
+              {!isEditable ? (
                 <span className="text-sm font-mono text-[#1A1A1A]">
                   {gl2030Num < 0 ? "-" : ""}${fmt$(Math.abs(gl2030Num))}
                 </span>
@@ -1167,7 +1376,7 @@ ${fadedJobs.length > 0 ? `
               )}
             </div>
           </div>
-          {!isFinalized && (
+          {isEditable && (
             <p className="text-xs text-[#9CA3AF] mt-3">
               Enter the current GL balance for each account. For 2030 (credit/liability), enter a negative value (e.g., -12,500.00).
             </p>
@@ -1175,13 +1384,30 @@ ${fadedJobs.length > 0 ? `
         </div>
 
         {/* ── Bottom actions ─────────────────────────────────────────────── */}
-        <div className="flex justify-end gap-3">
+        <div className="flex justify-end gap-3 mb-8">
           <button
             onClick={handlePrint}
             className="border border-[#E5E7EB] text-[#6B7280] hover:border-[#1B2A4A] hover:text-[#1B2A4A] px-5 py-2.5 rounded text-sm font-medium transition-colors"
           >
             Print Report
           </button>
+          {editingFinalized && (
+            <>
+              <button
+                onClick={handleCancelEdit}
+                className="border border-[#E5E7EB] text-[#6B7280] hover:border-[#1B2A4A] hover:text-[#1B2A4A] px-5 py-2.5 rounded text-sm font-medium transition-colors"
+              >
+                Cancel Edit
+              </button>
+              <button
+                onClick={handleReFinalize}
+                disabled={reFinalizing}
+                className="bg-[#D97706] hover:bg-[#B45309] disabled:opacity-50 text-white font-bold px-6 py-2.5 rounded transition-colors"
+              >
+                {reFinalizing ? "Saving…" : "Save & Re-finalize"}
+              </button>
+            </>
+          )}
           {!isFinalized && (
             <button
               onClick={handleFinalize}
@@ -1192,6 +1418,127 @@ ${fadedJobs.length > 0 ? `
             </button>
           )}
         </div>
+
+        {/* ── Audit Log (finalized only) ──────────────────────────────────── */}
+        {isFinalized && (
+          <div className="bg-white rounded-lg border border-[#E5E7EB] shadow-sm mb-4">
+            <button
+              onClick={() => {
+                const next = !auditExpanded;
+                setAuditExpanded(next);
+                if (next) loadAuditLog();
+              }}
+              className="w-full flex items-center justify-between px-5 py-4 text-left"
+            >
+              <span className="font-semibold text-[#1B2A4A]">Audit Log</span>
+              <span className="text-[#6B7280] text-sm">{auditExpanded ? "▲ Collapse" : "▶ Expand"}</span>
+            </button>
+            {auditExpanded && (
+              <div className="border-t border-[#E5E7EB] px-5 py-4">
+                {!auditLoaded ? (
+                  <p className="text-sm text-[#6B7280]">Loading…</p>
+                ) : auditEntries.length === 0 ? (
+                  <p className="text-sm text-[#6B7280]">No audit entries yet.</p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="border-b border-[#E5E7EB]">
+                          <th className="text-left py-2 pr-4 text-[#6B7280] font-semibold">Date / Time</th>
+                          <th className="text-left py-2 pr-4 text-[#6B7280] font-semibold">Job</th>
+                          <th className="text-left py-2 pr-4 text-[#6B7280] font-semibold">Field</th>
+                          <th className="text-right py-2 pr-4 text-[#6B7280] font-semibold">Old Value</th>
+                          <th className="text-right py-2 text-[#6B7280] font-semibold">New Value</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#E5E7EB]">
+                        {auditEntries.map((entry) => (
+                          <tr key={entry.id}>
+                            <td className="py-1.5 pr-4 font-mono text-[#6B7280] whitespace-nowrap">
+                              {new Date(entry.changed_at).toLocaleString("en-US", {
+                                month: "short", day: "numeric", year: "numeric",
+                                hour: "2-digit", minute: "2-digit",
+                              })}
+                            </td>
+                            <td className="py-1.5 pr-4 font-mono text-[#1A1A1A]">{entry.job_number}</td>
+                            <td className="py-1.5 pr-4 text-[#374151]">
+                              {FIELD_LABELS[entry.field_name] ?? entry.field_name}
+                            </td>
+                            <td className="py-1.5 pr-4 text-right font-mono text-[#B22234]">
+                              {entry.old_value ?? "—"}
+                            </td>
+                            <td className="py-1.5 text-right font-mono text-[#16A34A]">
+                              {entry.new_value ?? "—"}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Snapshots (finalized only) ──────────────────────────────────── */}
+        {isFinalized && (
+          <div className="bg-white rounded-lg border border-[#E5E7EB] shadow-sm mb-4">
+            <button
+              onClick={() => {
+                const next = !snapshotsExpanded;
+                setSnapshotsExpanded(next);
+                if (next) loadSnapshots();
+              }}
+              className="w-full flex items-center justify-between px-5 py-4 text-left"
+            >
+              <span className="font-semibold text-[#1B2A4A]">Snapshots</span>
+              <span className="text-[#6B7280] text-sm">{snapshotsExpanded ? "▲ Collapse" : "▶ Expand"}</span>
+            </button>
+            {snapshotsExpanded && (
+              <div className="border-t border-[#E5E7EB] px-5 py-4">
+                {!snapshotsLoaded ? (
+                  <p className="text-sm text-[#6B7280]">Loading…</p>
+                ) : snapshots.length === 0 ? (
+                  <p className="text-sm text-[#6B7280]">No snapshots yet.</p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="border-b border-[#E5E7EB]">
+                          <th className="text-left py-2 pr-4 text-[#6B7280] font-semibold">Date / Time</th>
+                          <th className="text-left py-2 pr-4 text-[#6B7280] font-semibold">Reason</th>
+                          <th className="text-right py-2 text-[#6B7280] font-semibold">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#E5E7EB]">
+                        {snapshots.map((snap) => (
+                          <tr key={snap.id}>
+                            <td className="py-1.5 pr-4 font-mono text-[#6B7280] whitespace-nowrap">
+                              {new Date(snap.created_at).toLocaleString("en-US", {
+                                month: "short", day: "numeric", year: "numeric",
+                                hour: "2-digit", minute: "2-digit",
+                              })}
+                            </td>
+                            <td className="py-1.5 pr-4 text-[#374151]">{snap.reason}</td>
+                            <td className="py-1.5 text-right">
+                              <button
+                                onClick={() => handleRestore(snap.id)}
+                                className="text-xs border border-[#1B2A4A] text-[#1B2A4A] hover:bg-[#1B2A4A]/10 px-3 py-1 rounded transition-colors"
+                              >
+                                Restore
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
