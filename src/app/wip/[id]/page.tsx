@@ -50,7 +50,7 @@ export default async function WipReportPage({
   const id = parseInt(params.id, 10);
   let report: WipReport | null = null;
   let lineItems: LineItemWithJob[] = [];
-  let priorValues: PriorValues = {};
+  const priorValues: PriorValues = {};
 
   try {
     const [row] = await sql`SELECT * FROM wip_reports WHERE id = ${id}`;
