@@ -81,17 +81,42 @@ export async function PUT(
       );
     }
 
-    const { lineItems, prior_balance_1290, prior_balance_2030 } = body as {
+    const { lineItems, prior_balance_1290, prior_balance_2030, is_finalized_edit } = body as {
       lineItems?: unknown[];
       prior_balance_1290?: number;
       prior_balance_2030?: number;
+      is_finalized_edit?: boolean;
     };
 
     if (!Array.isArray(lineItems)) {
       return NextResponse.json({ error: "lineItems must be an array" }, { status: 400 });
     }
 
-    console.log(`PUT /api/wip-reports/${reportId} — saving ${lineItems.length} line items`);
+    console.log(`PUT /api/wip-reports/${reportId} — saving ${lineItems.length} line items${is_finalized_edit ? " (finalized edit)" : ""}`);
+
+    // ── Audit pre-read: snapshot current DB values before overwriting ────────
+    type ItemSnap = Record<string, unknown>;
+    const currentItemsMap = new Map<number, ItemSnap>();
+    let currentReportGl: { prior_balance_1290: unknown; prior_balance_2030: unknown } | null = null;
+
+    if (is_finalized_edit) {
+      try {
+        const snap = await sql`
+          SELECT wli.id, wli.revised_contract, wli.est_total_cost, wli.cp_costs, wli.cp_billings,
+                 wli.costs_to_date, wli.billings_to_date, wli.pm_pct_override, wli.notes,
+                 wli.prior_year_earned, wli.prior_year_billings, wli.prior_year_costs,
+                 j.job_number
+          FROM wip_line_items wli
+          JOIN jobs j ON j.id = wli.job_id
+          WHERE wli.report_id = ${reportId}
+        `;
+        for (const r of snap) currentItemsMap.set(r.id as number, r as ItemSnap);
+        const [cr] = await sql`SELECT prior_balance_1290, prior_balance_2030 FROM wip_reports WHERE id = ${reportId}`;
+        if (cr) currentReportGl = cr as { prior_balance_1290: unknown; prior_balance_2030: unknown };
+      } catch (e) {
+        console.error("Audit pre-read failed:", e);
+      }
+    }
 
     // Save GL balance fields on wip_reports
     try {
@@ -191,6 +216,86 @@ export async function PUT(
         const msg = serializeError(e);
         console.error(`Prior-year UPDATE failed for item ${item.id}:`, msg);
         errors.push(`item ${item.id} prior: ${msg}`);
+      }
+    }
+
+    // ── Audit log: diff old vs new values and insert change rows ────────────
+    if (is_finalized_edit && currentItemsMap.size > 0) {
+      const NUMERIC_FIELDS = [
+        "revised_contract", "est_total_cost", "cp_costs", "cp_billings",
+        "costs_to_date", "billings_to_date",
+        "prior_year_earned", "prior_year_billings", "prior_year_costs",
+      ];
+
+      for (const item of lineItems as Record<string, unknown>[]) {
+        const old = currentItemsMap.get(item.id as number);
+        if (!old) continue;
+        const jobNumber = old.job_number as string;
+
+        for (const field of NUMERIC_FIELDS) {
+          const oldCents = Math.round(Number(old[field]) * 100);
+          const newCents = Math.round(Number(item[field]) * 100);
+          if (oldCents !== newCents) {
+            try {
+              const oldStr = Number(old[field]).toFixed(2);
+              const newStr = Number(item[field]).toFixed(2);
+              await sql`
+                INSERT INTO wip_audit_log (report_id, job_number, field_name, old_value, new_value)
+                VALUES (${reportId}, ${jobNumber}, ${field}, ${oldStr}, ${newStr})
+              `;
+            } catch (e) { console.error("Audit insert failed:", e); }
+          }
+        }
+
+        // pm_pct_override — nullable
+        const oldPmRnd = old.pm_pct_override != null ? Math.round(Number(old.pm_pct_override) * 10000) : null;
+        const newPmRnd = (item.pm_pct_override ?? null) != null ? Math.round(Number(item.pm_pct_override) * 10000) : null;
+        if (oldPmRnd !== newPmRnd) {
+          try {
+            const oldStr = old.pm_pct_override != null ? String(old.pm_pct_override) : null;
+            const newStr = item.pm_pct_override != null ? String(item.pm_pct_override) : null;
+            await sql`
+              INSERT INTO wip_audit_log (report_id, job_number, field_name, old_value, new_value)
+              VALUES (${reportId}, ${jobNumber}, ${"pm_pct_override"}, ${oldStr}, ${newStr})
+            `;
+          } catch (e) { console.error("Audit insert failed:", e); }
+        }
+
+        // notes — nullable string
+        const oldNotes = (old.notes ?? null) as string | null;
+        const newNotes = (item.notes ?? null) as string | null;
+        if (oldNotes !== newNotes) {
+          try {
+            await sql`
+              INSERT INTO wip_audit_log (report_id, job_number, field_name, old_value, new_value)
+              VALUES (${reportId}, ${jobNumber}, ${"notes"}, ${oldNotes}, ${newNotes})
+            `;
+          } catch (e) { console.error("Audit insert failed:", e); }
+        }
+      }
+
+      // Report-level GL balances
+      if (currentReportGl) {
+        const old1290 = Math.round(Number(currentReportGl.prior_balance_1290) * 100);
+        const new1290 = Math.round((prior_balance_1290 ?? 0) * 100);
+        if (old1290 !== new1290) {
+          try {
+            await sql`
+              INSERT INTO wip_audit_log (report_id, job_number, field_name, old_value, new_value)
+              VALUES (${reportId}, ${"REPORT"}, ${"prior_balance_1290"}, ${Number(currentReportGl.prior_balance_1290).toFixed(2)}, ${(prior_balance_1290 ?? 0).toFixed(2)})
+            `;
+          } catch (e) { console.error("Audit insert failed:", e); }
+        }
+        const old2030 = Math.round(Number(currentReportGl.prior_balance_2030) * 100);
+        const new2030 = Math.round((prior_balance_2030 ?? 0) * 100);
+        if (old2030 !== new2030) {
+          try {
+            await sql`
+              INSERT INTO wip_audit_log (report_id, job_number, field_name, old_value, new_value)
+              VALUES (${reportId}, ${"REPORT"}, ${"prior_balance_2030"}, ${Number(currentReportGl.prior_balance_2030).toFixed(2)}, ${(prior_balance_2030 ?? 0).toFixed(2)})
+            `;
+          } catch (e) { console.error("Audit insert failed:", e); }
+        }
       }
     }
 

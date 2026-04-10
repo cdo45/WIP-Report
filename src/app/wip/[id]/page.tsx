@@ -44,9 +44,12 @@ export type PriorValues = Record<number, { revised_contract: number; est_total_c
 
 export default async function WipReportPage({
   params,
+  searchParams,
 }: {
   params: { id: string };
+  searchParams?: { edit?: string };
 }) {
+  const autoEdit = searchParams?.edit === "1";
   const id = parseInt(params.id, 10);
   let report: WipReport | null = null;
   let lineItems: LineItemWithJob[] = [];
@@ -100,5 +103,5 @@ export default async function WipReportPage({
     );
   }
 
-  return <WipEditor report={report} initialLineItems={lineItems} priorValues={priorValues} />;
+  return <WipEditor report={report} initialLineItems={lineItems} priorValues={priorValues} autoEdit={autoEdit} />;
 }
