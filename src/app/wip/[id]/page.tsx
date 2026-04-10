@@ -36,6 +36,8 @@ export interface LineItemWithJob {
   notes: string | null;
 }
 
+export type PriorValues = Record<number, { revised_contract: number; est_total_cost: number }>;
+
 export default async function WipReportPage({
   params,
 }: {
@@ -44,6 +46,7 @@ export default async function WipReportPage({
   const id = parseInt(params.id, 10);
   let report: WipReport | null = null;
   let lineItems: LineItemWithJob[] = [];
+  let priorValues: PriorValues = {};
 
   try {
     const [row] = await sql`SELECT * FROM wip_reports WHERE id = ${id}`;
@@ -60,6 +63,26 @@ export default async function WipReportPage({
         WHERE wli.report_id = ${id}
         ORDER BY j.job_number
       `) as LineItemWithJob[];
+
+      // Fetch prior period baseline for variance columns
+      const [priorReport] = await sql`
+        SELECT id FROM wip_reports
+        WHERE status = 'final' AND period_date < ${report.period_date}
+        ORDER BY period_date DESC
+        LIMIT 1
+      `;
+      if (priorReport) {
+        const priorItems = await sql`
+          SELECT job_id, revised_contract, est_total_cost
+          FROM wip_line_items WHERE report_id = ${priorReport.id}
+        `;
+        for (const r of priorItems) {
+          priorValues[r.job_id as number] = {
+            revised_contract: Number(r.revised_contract),
+            est_total_cost:   Number(r.est_total_cost),
+          };
+        }
+      }
     }
   } catch (err) {
     console.error("Failed to fetch WIP report:", err);
@@ -73,5 +96,5 @@ export default async function WipReportPage({
     );
   }
 
-  return <WipEditor report={report} initialLineItems={lineItems} />;
+  return <WipEditor report={report} initialLineItems={lineItems} priorValues={priorValues} />;
 }

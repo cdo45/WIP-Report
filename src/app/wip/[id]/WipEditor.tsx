@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { LineItemWithJob, WipReport } from "./page";
+import type { LineItemWithJob, PriorValues, WipReport } from "./page";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -86,14 +86,46 @@ function calcRow(e: Editable) {
   };
 }
 
+// Variance cell — shows signed delta vs prior period, or "—" if no prior
+function DeltaCell({
+  current,
+  priorVal,
+  positiveIsGood,
+}: {
+  current: number;
+  priorVal: number | undefined;
+  positiveIsGood: boolean;
+}) {
+  if (priorVal === undefined) {
+    return (
+      <td className="px-2 py-1.5 whitespace-nowrap text-xs text-right text-gray-500">—</td>
+    );
+  }
+  const delta = current - priorVal;
+  const color =
+    delta === 0
+      ? "text-gray-500"
+      : (delta > 0) === positiveIsGood
+      ? "text-green-400"
+      : "text-red-400";
+  const sign = delta > 0 ? "+" : delta < 0 ? "-" : "";
+  return (
+    <td className={`px-2 py-1.5 whitespace-nowrap text-xs text-right font-mono ${color}`}>
+      {sign}${fmt$(Math.abs(delta))}
+    </td>
+  );
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function WipEditor({
   report,
   initialLineItems,
+  priorValues,
 }: {
   report: WipReport;
   initialLineItems: LineItemWithJob[];
+  priorValues: PriorValues;
 }) {
   const router = useRouter();
   const isFinalized = report.status === "final";
@@ -260,7 +292,7 @@ export default function WipEditor({
   const td = "px-2 py-1.5 whitespace-nowrap text-xs text-right text-gray-200";
   const tdL = "px-2 py-1.5 whitespace-nowrap text-xs";
   const inp = "w-full bg-[#162a50] border border-[#2e4a7a] text-white text-right rounded px-2 py-0.5 text-xs focus:outline-none focus:border-[#C9A84C]";
-  const COLS = 20;
+  const COLS = 22;
 
   // Final render sort — numeric dash-split: 2024-07 < 2025-01 < 2025-05
   const sortedForRender = [...computed].sort((a, b) => {
@@ -313,7 +345,9 @@ export default function WipEditor({
                 <th className={`${th} sticky left-0 z-20 w-[72px]`}>Job #</th>
                 <th className={`${th} sticky left-[72px] z-20 min-w-[150px]`}>Job Name</th>
                 <th className={`${th} text-right min-w-[130px]`}>Rev Contract</th>
+                <th className={`${th} text-right min-w-[80px]`}>Δ Rev</th>
                 <th className={`${th} text-right min-w-[120px]`}>Est Cost</th>
+                <th className={`${th} text-right min-w-[90px]`}>Δ Est Cost</th>
                 <th className={`${th} text-right min-w-[72px]`}>Est GP%</th>
                 <th className={`${th} text-right min-w-[130px]`}>Costs ITD</th>
                 <th className={`${th} text-right min-w-[130px]`}>Billings ITD</th>
@@ -375,6 +409,13 @@ export default function WipEditor({
                           )}
                         </td>
 
+                        {/* Variance: Δ Rev Contract */}
+                        <DeltaCell
+                          current={revisedContract}
+                          priorVal={priorValues[item.job_id]?.revised_contract}
+                          positiveIsGood={true}
+                        />
+
                         {/* Editable: Est Cost */}
                         <td className="px-1 py-0.5 whitespace-nowrap">
                           {isFinalized ? (
@@ -388,6 +429,13 @@ export default function WipEditor({
                             />
                           )}
                         </td>
+
+                        {/* Variance: Δ Est Cost */}
+                        <DeltaCell
+                          current={estTotalCost}
+                          priorVal={priorValues[item.job_id]?.est_total_cost}
+                          positiveIsGood={false}
+                        />
 
                         {/* Calc: Est GP% */}
                         <td className={td}>{fmtPct(estGpPct)}</td>
