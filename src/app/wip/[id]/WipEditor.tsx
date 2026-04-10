@@ -35,6 +35,7 @@ function formatDollarInput(raw: string): string {
 const DOLLAR_FIELDS = new Set([
   "revised_contract", "est_total_cost",
   "costs_to_date", "billings_to_date",
+  "cp_costs", "cp_billings",
   "prior_year_earned", "prior_year_billings", "prior_year_costs",
 ]);
 
@@ -43,6 +44,8 @@ interface Editable {
   est_total_cost: string;
   costs_to_date: string;
   billings_to_date: string;
+  cp_costs: string;
+  cp_billings: string;
   pm_pct_override: string;
   prior_year_earned: string;
   prior_year_billings: string;
@@ -50,12 +53,17 @@ interface Editable {
   notes: string;
 }
 
-// All calc logic uses editable values so Rev Contract / Est Cost edits flow live
-function calcRow(e: Editable) {
+// All calc logic uses editable values so Rev Contract / Est Cost edits flow live.
+// For prior-locked rows the caller supplies effectiveITD instead of reading from
+// e.costs_to_date / e.billings_to_date (which are not user-editable in that mode).
+function calcRow(
+  e: Editable,
+  effectiveITD?: { costsToDate: number; billingsToDate: number }
+) {
   const revisedContract = toNum(e.revised_contract);
   const estTotalCost = toNum(e.est_total_cost);
-  const costsToDate = toNum(e.costs_to_date);
-  const billingsToDate = toNum(e.billings_to_date);
+  const costsToDate    = effectiveITD?.costsToDate    ?? toNum(e.costs_to_date);
+  const billingsToDate = effectiveITD?.billingsToDate ?? toNum(e.billings_to_date);
   const pmStr = e.pm_pct_override.trim();
   const pmOverride = pmStr !== "" ? toNum(pmStr) : null;
 
@@ -80,6 +88,7 @@ function calcRow(e: Editable) {
 
   return {
     revisedContract, estTotalCost, estGpPct,
+    costsToDate, billingsToDate,
     pctComplete, effectivePct, earnedRevenue, overUnder,
     itdGp, itdGpPct,
     cyEarned, cyBillings, cyCosts, cyGp,
@@ -142,6 +151,8 @@ export default function WipEditor({
         est_total_cost:     formatDollarInput(String(item.est_total_cost ?? 0)),
         costs_to_date:      formatDollarInput(String(item.costs_to_date ?? 0)),
         billings_to_date:   formatDollarInput(String(item.billings_to_date ?? 0)),
+        cp_costs:           formatDollarInput(String(item.cp_costs ?? 0)),
+        cp_billings:        formatDollarInput(String(item.cp_billings ?? 0)),
         pm_pct_override:    item.pm_pct_override != null ? String(item.pm_pct_override) : "",
         prior_year_earned:  formatDollarInput(String(item.prior_year_earned ?? 0)),
         prior_year_billings:formatDollarInput(String(item.prior_year_billings ?? 0)),
@@ -166,18 +177,33 @@ export default function WipEditor({
   useEffect(() => () => { if (saveTimer.current) clearTimeout(saveTimer.current); }, []);
 
   function buildPayload(state: Map<number, Editable>) {
-    return Array.from(state.entries()).map(([id, f]) => ({
-      id,
-      revised_contract:    toNum(f.revised_contract),
-      est_total_cost:      toNum(f.est_total_cost),
-      costs_to_date:       toNum(f.costs_to_date),
-      billings_to_date:    toNum(f.billings_to_date),
-      pm_pct_override:     f.pm_pct_override.trim() !== "" ? toNum(f.pm_pct_override) : null,
-      prior_year_earned:   toNum(f.prior_year_earned),
-      prior_year_billings: toNum(f.prior_year_billings),
-      prior_year_costs:    toNum(f.prior_year_costs),
-      notes:               f.notes.trim() !== "" ? f.notes : null,
-    }));
+    return Array.from(state.entries()).map(([id, f]) => {
+      const item = sortedItems.find((i) => i.id === id);
+      const cpCosts    = toNum(f.cp_costs);
+      const cpBillings = toNum(f.cp_billings);
+      // For locked rows derive ITD from prior baseline + CP entry;
+      // for unlocked rows use the directly-editable ITD fields.
+      const costsToDate    = item?.is_prior_locked
+        ? Number(item.prior_itd_costs)    + cpCosts
+        : toNum(f.costs_to_date);
+      const billingsToDate = item?.is_prior_locked
+        ? Number(item.prior_itd_billings) + cpBillings
+        : toNum(f.billings_to_date);
+      return {
+        id,
+        revised_contract:    toNum(f.revised_contract),
+        est_total_cost:      toNum(f.est_total_cost),
+        cp_costs:            cpCosts,
+        cp_billings:         cpBillings,
+        costs_to_date:       costsToDate,
+        billings_to_date:    billingsToDate,
+        pm_pct_override:     f.pm_pct_override.trim() !== "" ? toNum(f.pm_pct_override) : null,
+        prior_year_earned:   toNum(f.prior_year_earned),
+        prior_year_billings: toNum(f.prior_year_billings),
+        prior_year_costs:    toNum(f.prior_year_costs),
+        notes:               f.notes.trim() !== "" ? f.notes : null,
+      };
+    });
   }
 
   async function doSave(state: Map<number, Editable>) {
@@ -261,12 +287,18 @@ export default function WipEditor({
     }
   }
 
-  // Compute all rows — uses editState so calcs are live
-  const computed = sortedItems.map((item) => ({
-    item,
-    editable: editState.get(item.id)!,
-    ...calcRow(editState.get(item.id)!),
-  }));
+  // Compute all rows — uses editState so calcs are live.
+  // Locked rows: ITD = prior baseline + current-period entry.
+  const computed = sortedItems.map((item) => {
+    const editable = editState.get(item.id)!;
+    const effectiveITD = item.is_prior_locked
+      ? {
+          costsToDate:    Number(item.prior_itd_costs)    + toNum(editable.cp_costs),
+          billingsToDate: Number(item.prior_itd_billings) + toNum(editable.cp_billings),
+        }
+      : undefined;
+    return { item, editable, ...calcRow(editable, effectiveITD) };
+  });
 
   // Summary totals
   const totalUnderbillings = computed.reduce((s, r) => s + Math.max(0, r.overUnder), 0);
@@ -292,7 +324,7 @@ export default function WipEditor({
   const td = "px-2 py-1.5 whitespace-nowrap text-xs text-right text-gray-200";
   const tdL = "px-2 py-1.5 whitespace-nowrap text-xs";
   const inp = "w-full bg-[#162a50] border border-[#2e4a7a] text-white text-right rounded px-2 py-0.5 text-xs focus:outline-none focus:border-[#C9A84C]";
-  const COLS = 22;
+  const COLS = 24;
 
   // Final render sort — numeric dash-split: 2024-07 < 2025-01 < 2025-05
   const sortedForRender = [...computed].sort((a, b) => {
@@ -349,6 +381,8 @@ export default function WipEditor({
                 <th className={`${th} text-right min-w-[120px]`}>Est Cost</th>
                 <th className={`${th} text-right min-w-[90px]`}>Δ Est Cost</th>
                 <th className={`${th} text-right min-w-[72px]`}>Est GP%</th>
+                <th className={`${th} text-right min-w-[120px]`}>CP Costs</th>
+                <th className={`${th} text-right min-w-[120px]`}>CP Billings</th>
                 <th className={`${th} text-right min-w-[130px]`}>Costs ITD</th>
                 <th className={`${th} text-right min-w-[130px]`}>Billings ITD</th>
                 <th className={`${th} text-right min-w-[72px]`}>% Comp</th>
@@ -372,6 +406,7 @@ export default function WipEditor({
                   {
                     item, editable,
                     revisedContract, estTotalCost, estGpPct,
+                    costsToDate, billingsToDate,
                     pctComplete, effectivePct, earnedRevenue, overUnder,
                     itdGp, itdGpPct,
                     cyEarned, cyBillings, cyCosts, cyGp,
@@ -440,9 +475,47 @@ export default function WipEditor({
                         {/* Calc: Est GP% */}
                         <td className={td}>{fmtPct(estGpPct)}</td>
 
-                        {/* Editable: Costs ITD */}
+                        {/* CP Costs — editable for locked rows, dash for unlocked */}
                         <td className="px-1 py-0.5 whitespace-nowrap">
-                          {isFinalized ? (
+                          {item.is_prior_locked ? (
+                            isFinalized ? (
+                              <span className={td}>${fmt$(toNum(editable.cp_costs))}</span>
+                            ) : (
+                              <input
+                                type="text"
+                                value={editable.cp_costs}
+                                onChange={(e) => handleChange(item.id, "cp_costs", e.target.value)}
+                                className={inp}
+                              />
+                            )
+                          ) : (
+                            <span className={`${td} text-gray-600`}>—</span>
+                          )}
+                        </td>
+
+                        {/* CP Billings — editable for locked rows, dash for unlocked */}
+                        <td className="px-1 py-0.5 whitespace-nowrap">
+                          {item.is_prior_locked ? (
+                            isFinalized ? (
+                              <span className={td}>${fmt$(toNum(editable.cp_billings))}</span>
+                            ) : (
+                              <input
+                                type="text"
+                                value={editable.cp_billings}
+                                onChange={(e) => handleChange(item.id, "cp_billings", e.target.value)}
+                                className={inp}
+                              />
+                            )
+                          ) : (
+                            <span className={`${td} text-gray-600`}>—</span>
+                          )}
+                        </td>
+
+                        {/* Costs ITD — editable for unlocked, read-only calc for locked */}
+                        <td className="px-1 py-0.5 whitespace-nowrap">
+                          {item.is_prior_locked ? (
+                            <span className={td}>${fmt$(costsToDate)}</span>
+                          ) : isFinalized ? (
                             <span className={td}>${fmt$(toNum(editable.costs_to_date))}</span>
                           ) : (
                             <input
@@ -454,9 +527,11 @@ export default function WipEditor({
                           )}
                         </td>
 
-                        {/* Editable: Billings ITD */}
+                        {/* Billings ITD — editable for unlocked, read-only calc for locked */}
                         <td className="px-1 py-0.5 whitespace-nowrap">
-                          {isFinalized ? (
+                          {item.is_prior_locked ? (
+                            <span className={td}>${fmt$(billingsToDate)}</span>
+                          ) : isFinalized ? (
                             <span className={td}>${fmt$(toNum(editable.billings_to_date))}</span>
                           ) : (
                             <input
