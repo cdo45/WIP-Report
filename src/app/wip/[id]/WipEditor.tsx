@@ -287,6 +287,311 @@ export default function WipEditor({
     }
   }
 
+  function handlePrint() {
+    const dateStr = toDateStr(report.period_date);
+    const generatedAt = new Date().toLocaleString("en-US", {
+      month: "short", day: "numeric", year: "numeric",
+      hour: "2-digit", minute: "2-digit",
+    });
+
+    // Recompute fresh sorted rows for the print snapshot
+    const rows = [...computed].sort((a, b) => {
+      const ap = a.item.job_number.split("-").map(Number);
+      const bp = b.item.job_number.split("-").map(Number);
+      if (ap[0] !== bp[0]) return ap[0] - bp[0];
+      return (ap[1] ?? 0) - (bp[1] ?? 0);
+    });
+
+    const inProgress = rows.filter((r) => r.pctComplete < 1.0);
+    const completed   = rows.filter((r) => r.pctComplete >= 1.0);
+
+    // Aggregate totals helper
+    function totals(set: typeof rows) {
+      return set.reduce(
+        (s, r) => ({
+          rev:      s.rev      + r.revisedContract,
+          cost:     s.cost     + r.estTotalCost,
+          costItd:  s.costItd  + r.costsToDate,
+          billItd:  s.billItd  + r.billingsToDate,
+          earned:   s.earned   + r.earnedRevenue,
+          ou:       s.ou       + r.overUnder,
+          itdGp:    s.itdGp    + r.itdGp,
+        }),
+        { rev: 0, cost: 0, costItd: 0, billItd: 0, earned: 0, ou: 0, itdGp: 0 }
+      );
+    }
+
+    const d = (n: number) => n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const pct = (n: number) => (n * 100).toFixed(1) + "%";
+
+    function jobRows(set: typeof rows): string {
+      return set.map((r) => {
+        const ouCls = r.overUnder >= 0 ? "pos" : "neg";
+        return `<tr>
+          <td>${r.item.job_number}</td>
+          <td>${r.item.job_name}</td>
+          <td class="num">$${d(r.revisedContract)}</td>
+          <td class="num">$${d(r.estTotalCost)}</td>
+          <td class="num">${pct(r.estGpPct)}</td>
+          <td class="num">$${d(r.costsToDate)}</td>
+          <td class="num">$${d(r.billingsToDate)}</td>
+          <td class="num">${pct(r.pctComplete)}</td>
+          <td class="num">$${d(r.earnedRevenue)}</td>
+          <td class="num ${ouCls}">${r.overUnder >= 0 ? "+" : ""}$${d(r.overUnder)}</td>
+          <td class="num">$${d(r.itdGp)}</td>
+          <td class="num">${pct(r.itdGpPct)}</td>
+        </tr>`;
+      }).join("");
+    }
+
+    function totalRow(t: ReturnType<typeof totals>): string {
+      const ouCls = t.ou >= 0 ? "pos" : "neg";
+      const itdGpPct = t.earned !== 0 ? t.itdGp / t.earned : 0;
+      const estGpPct = t.rev > 0 ? (t.rev - t.cost) / t.rev : 0;
+      return `<tr class="total-row">
+        <td colspan="2">TOTAL</td>
+        <td class="num">$${d(t.rev)}</td>
+        <td class="num">$${d(t.cost)}</td>
+        <td class="num">${pct(estGpPct)}</td>
+        <td class="num">$${d(t.costItd)}</td>
+        <td class="num">$${d(t.billItd)}</td>
+        <td class="num">—</td>
+        <td class="num">$${d(t.earned)}</td>
+        <td class="num ${ouCls}">${t.ou >= 0 ? "+" : ""}$${d(t.ou)}</td>
+        <td class="num">$${d(t.itdGp)}</td>
+        <td class="num">${pct(itdGpPct)}</td>
+      </tr>`;
+    }
+
+    const ipTot = totals(inProgress);
+    const cmTot = totals(completed);
+    const allTot = totals(rows);
+
+    // Risk flags
+    const riskFlags: string[] = [];
+    for (const { item, pctComplete, costsToDate, billingsToDate, revisedContract, estTotalCost } of rows) {
+      if (pctComplete > 1.0 && estTotalCost > 0)
+        riskFlags.push(`<tr><td class="mono">${item.job_number}</td><td>${item.job_name}</td><td>Cost overrun — ${(pctComplete*100).toFixed(0)}% cost complete</td><td class="badge-red">High</td></tr>`);
+      const bPct = revisedContract > 0 ? billingsToDate / revisedContract : 0;
+      const cPct = estTotalCost > 0 ? costsToDate / estTotalCost : 0;
+      if (Math.abs(bPct - cPct) > 0.1 && revisedContract > 5_000)
+        riskFlags.push(`<tr><td class="mono">${item.job_number}</td><td>${item.job_name}</td><td>Billing/cost gap: ${(bPct*100).toFixed(0)}% billed vs ${(cPct*100).toFixed(0)}% cost complete</td><td class="badge-yellow">Medium</td></tr>`);
+      if (costsToDate > 0 && billingsToDate === 0)
+        riskFlags.push(`<tr><td class="mono">${item.job_number}</td><td>${item.job_name}</td><td>Costs incurred with no billings to date</td><td class="badge-yellow">Medium</td></tr>`);
+      const hasPrior = Number(item.prior_itd_costs) > 0 || Number(item.prior_itd_billings) > 0;
+      if (hasPrior && Number(item.cp_costs) === 0 && Number(item.cp_billings) === 0)
+        riskFlags.push(`<tr><td class="mono">${item.job_number}</td><td>${item.job_name}</td><td>No current-period activity</td><td class="badge-yellow">Medium</td></tr>`);
+    }
+
+    // GP fade jobs
+    const fadedJobs = rows
+      .map((r) => ({
+        num: r.item.job_number, name: r.item.job_name,
+        orig: Number(r.item.original_gp_pct),
+        curr: r.estGpPct * 100,
+        delta: r.estGpPct * 100 - Number(r.item.original_gp_pct),
+      }))
+      .filter((j) => j.delta < -5)
+      .sort((a, b) => a.delta - b.delta);
+
+    // JE HTML
+    function jeLines(): string {
+      let out = "";
+      if (adj1290 > 0) out += `<div class="je-line"><span class="je-tag">DR</span><span>1290 Costs in Excess of Billings</span><span class="pos ml">$${d(adj1290)}</span></div><div class="je-line"><span class="je-tag">CR</span><span>401510 WIP Revenue Recognized</span><span class="pos ml">$${d(adj1290)}</span></div>`;
+      if (adj1290 < 0) out += `<div class="je-line"><span class="je-tag">DR</span><span>401510 WIP Revenue Recognized</span><span class="neg ml">$${d(Math.abs(adj1290))}</span></div><div class="je-line"><span class="je-tag">CR</span><span>1290 Costs in Excess of Billings</span><span class="neg ml">$${d(Math.abs(adj1290))}</span></div>`;
+      if (adj2030 > 0) out += `<div class="je-line"><span class="je-tag">DR</span><span>2030 Billings in Excess of Costs</span><span class="pos ml">$${d(adj2030)}</span></div><div class="je-line"><span class="je-tag">CR</span><span>401510 WIP Revenue Recognized</span><span class="pos ml">$${d(adj2030)}</span></div>`;
+      if (adj2030 < 0) out += `<div class="je-line"><span class="je-tag">DR</span><span>401510 WIP Revenue Recognized</span><span class="neg ml">$${d(Math.abs(adj2030))}</span></div><div class="je-line"><span class="je-tag">CR</span><span>2030 Billings in Excess of Costs</span><span class="neg ml">$${d(Math.abs(adj2030))}</span></div>`;
+      if (adj1290 === 0 && adj2030 === 0) out = `<div style="color:#9CA3AF;font-style:italic">No adjustments needed.</div>`;
+      out += `<div class="je-sep"></div><div class="je-line"><span class="je-tag"></span><span>Net P&amp;L Impact</span><span class="${netAdj >= 0 ? "pos" : "neg"} ml">${netAdj >= 0 ? "+" : "-"}$${d(Math.abs(netAdj))}</span></div>`;
+      return out;
+    }
+
+    const wtdAvgGp = allTot.rev > 0 ? (allTot.rev - allTot.cost) / allTot.rev : 0;
+
+    const html = `<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8">
+<title>WIP Report — ${dateStr}</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Arial,Helvetica,sans-serif;font-size:9pt;color:#1A1A1A;background:#fff;padding:20px}
+.header{text-align:center;margin-bottom:18px;padding-bottom:10px;border-bottom:2px solid #1B2A4A}
+.header h1{font-size:15pt;font-weight:bold;letter-spacing:3px;color:#1B2A4A}
+.header h2{font-size:10.5pt;margin:3px 0;color:#374151}
+.header p{font-size:7.5pt;color:#6B7280;margin:2px 0}
+.section{margin-bottom:18px}
+.sec-title{font-size:9pt;font-weight:bold;color:#1B2A4A;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;padding-bottom:2px;border-bottom:1px solid #1B2A4A}
+.sub-title{font-size:8.5pt;font-weight:bold;color:#374151;margin:8px 0 4px}
+table{width:100%;border-collapse:collapse;font-size:7.5pt}
+th{background:#1B2A4A;color:#fff;padding:3px 5px;text-align:left;white-space:nowrap}
+th.num{text-align:right}
+td{padding:2.5px 5px;border-bottom:1px solid #E5E7EB;color:#1A1A1A}
+td.num{text-align:right;font-family:'Courier New',monospace;white-space:nowrap}
+td.mono{font-family:'Courier New',monospace}
+tr:nth-child(even) td{background:#F9FAFB}
+tr.total-row td{font-weight:bold;border-top:2px solid #1B2A4A;border-bottom:none;background:#F3F4F6!important}
+.pos{color:#16A34A}
+.neg{color:#B22234}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
+.sum-box{border:1px solid #E5E7EB;padding:9px;border-radius:3px}
+.sum-box h3{font-size:8pt;font-weight:bold;color:#1B2A4A;margin-bottom:5px}
+.sum-row{display:flex;justify-content:space-between;font-size:8pt;margin-bottom:2px}
+.sum-row .lbl{color:#374151}
+.sum-row .val{font-family:'Courier New',monospace;font-weight:bold}
+.sum-row.tot{border-top:1px solid #E5E7EB;padding-top:3px;margin-top:3px}
+.je-mono{font-family:'Courier New',monospace;font-size:8pt}
+.je-line{display:flex;gap:12px;margin-bottom:2px;font-family:'Courier New',monospace;font-size:8pt}
+.je-tag{color:#6B7280;width:18px;flex-shrink:0}
+.ml{margin-left:auto}
+.je-sep{border-top:1px solid #E5E7EB;margin:4px 0}
+.metrics-row{display:flex;flex-wrap:wrap;gap:14px}
+.metric{flex:1;min-width:160px;border:1px solid #E5E7EB;padding:7px 10px;border-radius:3px}
+.metric .m-lbl{font-size:7.5pt;color:#6B7280;margin-bottom:2px}
+.metric .m-val{font-size:10pt;font-weight:bold;font-family:'Courier New',monospace}
+.badge-red{color:#B22234;font-weight:bold}
+.badge-yellow{color:#D97706;font-weight:bold}
+@media print{
+  @page{margin:.45in;size:landscape}
+  body{padding:0}
+  .section{page-break-inside:avoid}
+  thead{display:table-header-group}
+}
+</style></head>
+<body>
+
+<div class="header">
+  <h1>VANCE CORPORATION</h1>
+  <h2>Work-in-Progress Schedule</h2>
+  <p>Period Ending: ${dateStr}</p>
+  <p>Generated: ${generatedAt}</p>
+</div>
+
+<!-- SECTION 1 -->
+<div class="section">
+<div class="sec-title">Section 1 — Contract Schedule</div>
+${inProgress.length > 0 ? `
+<div class="sub-title">Contracts in Progress</div>
+<table>
+<thead><tr>
+  <th>Job #</th><th>Job Name</th>
+  <th class="num">Rev Contract</th><th class="num">Est Cost</th><th class="num">Est GP%</th>
+  <th class="num">Costs ITD</th><th class="num">Billings ITD</th><th class="num">% Comp</th>
+  <th class="num">Earned Rev</th><th class="num">Over/Under</th>
+  <th class="num">ITD GP$</th><th class="num">ITD GP%</th>
+</tr></thead>
+<tbody>${jobRows(inProgress)}</tbody>
+<tfoot>${totalRow(ipTot)}</tfoot>
+</table>` : ""}
+${completed.length > 0 ? `
+<div class="sub-title" style="margin-top:12px">Completed Contracts</div>
+<table>
+<thead><tr>
+  <th>Job #</th><th>Job Name</th>
+  <th class="num">Rev Contract</th><th class="num">Est Cost</th><th class="num">Est GP%</th>
+  <th class="num">Costs ITD</th><th class="num">Billings ITD</th><th class="num">% Comp</th>
+  <th class="num">Earned Rev</th><th class="num">Over/Under</th>
+  <th class="num">ITD GP$</th><th class="num">ITD GP%</th>
+</tr></thead>
+<tbody>${jobRows(completed)}</tbody>
+<tfoot>${totalRow(cmTot)}</tfoot>
+</table>` : ""}
+${inProgress.length > 0 && completed.length > 0 ? `
+<div class="sub-title" style="margin-top:12px">Combined Total</div>
+<table><thead><tr>
+  <th>Job #</th><th>Job Name</th>
+  <th class="num">Rev Contract</th><th class="num">Est Cost</th><th class="num">Est GP%</th>
+  <th class="num">Costs ITD</th><th class="num">Billings ITD</th><th class="num">% Comp</th>
+  <th class="num">Earned Rev</th><th class="num">Over/Under</th>
+  <th class="num">ITD GP$</th><th class="num">ITD GP%</th>
+</tr></thead>
+<tfoot>${totalRow(allTot)}</tfoot>
+</table>` : ""}
+</div>
+
+<!-- SECTION 2 & 3 -->
+<div class="two-col">
+<div class="sum-box">
+<h3>Section 2 — Billings Position</h3>
+<div class="sum-row"><span class="lbl">Underbillings (Asset 1290)</span><span class="val pos">$${d(totalUnderbillings)}</span></div>
+<div class="sum-row"><span class="lbl">Overbillings (Liability 2030)</span><span class="val neg">$${d(totalOverbillings)}</span></div>
+<div class="sum-row tot"><span class="lbl" style="font-weight:bold">Net Over/Under</span><span class="val ${netOverUnder >= 0 ? "pos" : "neg"}">${netOverUnder >= 0 ? "+" : ""}$${d(netOverUnder)}</span></div>
+<div class="sum-row" style="margin-top:4px"><span class="lbl">Total Backlog</span><span class="val">$${d(totalBacklog)}</span></div>
+</div>
+<div class="sum-box">
+<h3>Section 3 — Current Year Summary</h3>
+<div class="sum-row"><span class="lbl">CY Revenue Recognized</span><span class="val">$${d(totalCyRevenue)}</span></div>
+<div class="sum-row"><span class="lbl">CY Costs Incurred</span><span class="val">$${d(totalCyCosts)}</span></div>
+<div class="sum-row tot"><span class="lbl" style="font-weight:bold">CY Gross Profit</span><span class="val ${totalCyGp >= 0 ? "pos" : "neg"}">$${d(totalCyGp)}</span></div>
+</div>
+</div>
+
+<!-- SECTION 4 -->
+<div class="section">
+<div class="sec-title">Section 4 — GL Reconciliation &amp; Journal Entry</div>
+<table style="margin-bottom:10px">
+<thead><tr>
+  <th>Account</th>
+  <th class="num">Current Balance</th>
+  <th class="num">Should Be</th>
+  <th class="num">Adjustment</th>
+</tr></thead>
+<tbody>
+<tr>
+  <td>1290 Costs in Excess</td>
+  <td class="num">$${d(gl1290Num)}</td>
+  <td class="num pos">$${d(totalUnderbillings)}</td>
+  <td class="num ${adj1290 >= 0 ? "pos" : "neg"}">${adj1290 >= 0 ? "+" : "-"}$${d(Math.abs(adj1290))}</td>
+</tr>
+<tr>
+  <td>2030 Billings in Excess</td>
+  <td class="num">${gl2030Num < 0 ? "-" : ""}$${d(Math.abs(gl2030Num))}</td>
+  <td class="num neg">-$${d(totalOverbillings)}</td>
+  <td class="num ${adj2030 >= 0 ? "pos" : "neg"}">${adj2030 >= 0 ? "+" : "-"}$${d(Math.abs(adj2030))}</td>
+</tr>
+<tr class="total-row">
+  <td>401510 WIP Revenue (net)</td>
+  <td class="num" style="color:#9CA3AF">—</td>
+  <td class="num" style="color:#9CA3AF">—</td>
+  <td class="num ${netAdj >= 0 ? "pos" : "neg"}">${netAdj >= 0 ? "+" : "-"}$${d(Math.abs(netAdj))}</td>
+</tr>
+</tbody>
+</table>
+<div>${jeLines()}</div>
+</div>
+
+<!-- SECTION 5 -->
+<div class="section">
+<div class="sec-title">Section 5 — Key Metrics</div>
+<div class="metrics-row">
+  <div class="metric"><div class="m-lbl">Weighted Avg GP%</div><div class="m-val">${pct(wtdAvgGp)}</div></div>
+  <div class="metric"><div class="m-lbl">Total Backlog</div><div class="m-val">$${d(totalBacklog)}</div></div>
+  <div class="metric"><div class="m-lbl">Risk Flags</div><div class="m-val ${riskFlags.length > 0 ? "badge-yellow" : ""}">${riskFlags.length} job${riskFlags.length !== 1 ? "s" : ""} flagged</div></div>
+  <div class="metric"><div class="m-lbl">GP Fade (&gt;5pt drop)</div><div class="m-val ${fadedJobs.length > 0 ? "badge-red" : ""}">${fadedJobs.length} job${fadedJobs.length !== 1 ? "s" : ""}</div></div>
+</div>
+${riskFlags.length > 0 ? `
+<div class="sub-title" style="margin-top:10px">Risk Flags Detail</div>
+<table>
+<thead><tr><th>Job #</th><th>Job Name</th><th>Issue</th><th>Severity</th></tr></thead>
+<tbody>${riskFlags.join("")}</tbody>
+</table>` : ""}
+${fadedJobs.length > 0 ? `
+<div class="sub-title" style="margin-top:10px">GP Fade Detail (jobs with &gt;5pt decline)</div>
+<table>
+<thead><tr><th>Job #</th><th>Job Name</th><th class="num">Original GP%</th><th class="num">Current GP%</th><th class="num">Δ GP%</th></tr></thead>
+<tbody>${fadedJobs.map((j, i) => `<tr${i % 2 === 1 ? ' style="background:#F9FAFB"' : ""}><td class="mono">${j.num}</td><td>${j.name}</td><td class="num">${j.orig.toFixed(1)}%</td><td class="num">${j.curr.toFixed(1)}%</td><td class="num neg">${j.delta.toFixed(1)}%</td></tr>`).join("")}
+</tbody>
+</table>` : ""}
+</div>
+
+</body></html>`;
+
+    const win = window.open("", "_blank", "width=1200,height=900");
+    if (!win) { alert("Pop-up blocked. Please allow pop-ups for this site."); return; }
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+  }
+
   // Compute all rows — uses editState so calcs are live.
   // Locked rows: ITD = prior baseline + current-period entry.
   const computed = sortedItems.map((item) => {
@@ -353,6 +658,12 @@ export default function WipEditor({
             {saving && <span className="text-xs text-[#6B7280]">Saving…</span>}
             {!saving && saveStatus === "saved"  && <span className="text-xs text-[#16A34A]">Saved</span>}
             {!saving && saveStatus === "error"  && <span className="text-xs text-[#B22234]">Save failed</span>}
+            <button
+              onClick={handlePrint}
+              className="border border-[#E5E7EB] text-[#6B7280] hover:border-[#1B2A4A] hover:text-[#1B2A4A] px-4 py-2 rounded text-sm font-medium transition-colors"
+            >
+              Print Report
+            </button>
             {isFinalized ? (
               <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded text-sm font-semibold">
                 Finalized
@@ -863,9 +1174,15 @@ export default function WipEditor({
           )}
         </div>
 
-        {/* ── Bottom finalize ────────────────────────────────────────────── */}
-        {!isFinalized && (
-          <div className="flex justify-end">
+        {/* ── Bottom actions ─────────────────────────────────────────────── */}
+        <div className="flex justify-end gap-3">
+          <button
+            onClick={handlePrint}
+            className="border border-[#E5E7EB] text-[#6B7280] hover:border-[#1B2A4A] hover:text-[#1B2A4A] px-5 py-2.5 rounded text-sm font-medium transition-colors"
+          >
+            Print Report
+          </button>
+          {!isFinalized && (
             <button
               onClick={handleFinalize}
               disabled={finalizing}
@@ -873,8 +1190,8 @@ export default function WipEditor({
             >
               {finalizing ? "Finalizing…" : "Finalize Report"}
             </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );
