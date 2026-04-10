@@ -72,6 +72,8 @@ function calcItem(item: LineItemWithJob) {
       : 0;
   const gpFadePts = (estGpPct - origGpPct) * 100;
 
+  const cyBillings = billingsToDate - Number(item.prior_year_billings);
+
   return {
     revisedContract,
     estTotalCost,
@@ -83,6 +85,7 @@ function calcItem(item: LineItemWithJob) {
     estGpPct,
     origGpPct,
     gpFadePts,
+    cyBillings,
     cpCosts:    Number(item.cp_costs),
     cpBillings: Number(item.cp_billings),
   };
@@ -136,6 +139,13 @@ export default function WipSummaryClient({
     totalRevised > 0
       ? computed.reduce((s, r) => s + r.estGpPct * r.revisedContract, 0) / totalRevised
       : 0;
+
+  // ── YTD totals (current-year columns from latest report) ─────────────────
+  const totalCyRevenue  = computed.reduce((s, r) => s + (r.earnedRevenue - Number(r.item.prior_year_earned)), 0);
+  const totalCyCosts    = computed.reduce((s, r) => s + (r.costsToDate   - Number(r.item.prior_year_costs)), 0);
+  const totalCyBillings = computed.reduce((s, r) => s + r.cyBillings, 0);
+  const totalCyGp       = totalCyRevenue - totalCyCosts;
+  const totalCyGpPct    = totalCyRevenue > 0 ? totalCyGp / totalCyRevenue : 0;
 
   // ── Notable jobs for per-job narrative ───────────────────────────────────
   const notableRows = useMemo(
@@ -394,6 +404,29 @@ export default function WipSummaryClient({
               while overbillings (billings in excess of costs and estimated
               earnings) total{" "}
               <strong className="text-[#B22234]">{dollar(totalOverbillings)}</strong>.
+            </p>
+
+            {/* YTD paragraph */}
+            <p className="text-sm text-[#374151] leading-relaxed mb-5">
+              On a year-to-date basis, the company has recognized{" "}
+              <strong>${fmt$(totalCyRevenue)}</strong> in revenue against{" "}
+              <strong>${fmt$(totalCyCosts)}</strong> in costs, yielding a current-year gross
+              profit of{" "}
+              <strong className={totalCyGp >= 0 ? "text-[#16A34A]" : "text-[#B22234]"}>
+                {dollar(totalCyGp)}
+              </strong>{" "}
+              ({(totalCyGpPct * 100).toFixed(1)}% GP margin). YTD billings total{" "}
+              <strong>${fmt$(totalCyBillings)}</strong>
+              {totalCyRevenue > 0 && (
+                <>
+                  {" "}
+                  — the company is billing at{" "}
+                  <strong>
+                    {((totalCyBillings / totalCyRevenue) * 100).toFixed(0)}%
+                  </strong>{" "}
+                  of earned revenue year-to-date.
+                </>
+              )}
             </p>
 
             {/* Per-job bullets */}

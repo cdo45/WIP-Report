@@ -702,7 +702,9 @@ ${inProgress.length > 0 && completed.length > 0 ? `
 <h3>Section 3 — Current Year Summary</h3>
 <div class="sum-row"><span class="lbl">CY Revenue Recognized</span><span class="val">$${d(totalCyRevenue)}</span></div>
 <div class="sum-row"><span class="lbl">CY Costs Incurred</span><span class="val">$${d(totalCyCosts)}</span></div>
+<div class="sum-row"><span class="lbl">CY Billings</span><span class="val">$${d(totalCyBillings)}</span></div>
 <div class="sum-row tot"><span class="lbl" style="font-weight:bold">CY Gross Profit</span><span class="val ${totalCyGp >= 0 ? "pos" : "neg"}">$${d(totalCyGp)}</span></div>
+<div class="sum-row"><span class="lbl">CY GP%</span><span class="val ${totalCyGpPct >= 0 ? "pos" : "neg"}">${pct(totalCyGpPct)}</span></div>
 </div>
 </div>
 
@@ -793,7 +795,9 @@ ${fadedJobs.length > 0 ? `
   const totalBacklog       = computed.reduce((s, r) => s + (r.revisedContract - r.earnedRevenue), 0);
   const totalCyRevenue     = computed.reduce((s, r) => s + r.cyEarned, 0);
   const totalCyCosts       = computed.reduce((s, r) => s + r.cyCosts, 0);
+  const totalCyBillings    = computed.reduce((s, r) => s + r.cyBillings, 0);
   const totalCyGp          = totalCyRevenue - totalCyCosts;
+  const totalCyGpPct       = totalCyRevenue > 0 ? totalCyGp / totalCyRevenue : 0;
 
   // GL reconciliation values
   const gl1290Num = toNum(gl1290Str);

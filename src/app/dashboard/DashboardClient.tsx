@@ -11,6 +11,7 @@ import {
   Legend,
   LineChart,
   Line,
+  ComposedChart,
   ResponsiveContainer,
   ReferenceLine,
 } from "recharts";
@@ -56,8 +57,10 @@ function calcItem(item: DashLineItem) {
   const estGpPct =
     revisedContract > 0 ? (revisedContract - estTotalCost) / revisedContract : 0;
   const pyEarned = Number(item.prior_year_earned);
+  const pyBillings = Number(item.prior_year_billings);
   const pyCosts = Number(item.prior_year_costs);
   const cyEarned = earnedRevenue - pyEarned;
+  const cyBillings = billingsToDate - pyBillings;
   const cyCosts = costsToDate - pyCosts;
   const cyGp = cyEarned - cyCosts;
   return {
@@ -73,6 +76,7 @@ function calcItem(item: DashLineItem) {
     itdGpPct,
     estGpPct,
     cyEarned,
+    cyBillings,
     cyCosts,
     cyGp,
   };
@@ -110,8 +114,17 @@ export default function DashboardClient({
   const totalBacklog = computed.reduce((s, r) => s + r.backlog, 0);
   const totalCyRevenue = computed.reduce((s, r) => s + r.cyEarned, 0);
   const totalCyCosts = computed.reduce((s, r) => s + r.cyCosts, 0);
+  const totalCyBillings = computed.reduce((s, r) => s + r.cyBillings, 0);
   const totalCyGp = totalCyRevenue - totalCyCosts;
+  const ytdGpPct = totalCyRevenue > 0 ? totalCyGp / totalCyRevenue : 0;
   const wtdAvgGp = totalRevised > 0 ? (totalRevised - totalEstCost) / totalRevised : 0;
+
+  // Prior year totals (baseline from current report's line items)
+  const priorYearRevenue  = computed.reduce((s, r) => s + Number(r.item.prior_year_earned), 0);
+  const priorYearCosts    = computed.reduce((s, r) => s + Number(r.item.prior_year_costs), 0);
+  const priorYearBillings = computed.reduce((s, r) => s + Number(r.item.prior_year_billings), 0);
+  const priorYearGp       = priorYearRevenue - priorYearCosts;
+  const priorYearGpPct    = priorYearRevenue > 0 ? priorYearGp / priorYearRevenue : 0;
 
   // ── Chart data ────────────────────────────────────────────────────────────
   const billingsChartData = [
@@ -184,11 +197,11 @@ export default function DashboardClient({
   const trendPoints = useMemo(() => {
     const map = new Map<
       string,
-      { underbillings: number; overbillings: number; cyRevenue: number; cyCosts: number }
+      { underbillings: number; overbillings: number; cyRevenue: number; cyCosts: number; cyBillings: number }
     >();
     for (const row of trendRows) {
       const key = new Date(row.period_date).toISOString().slice(0, 7); // "YYYY-MM"
-      if (!map.has(key)) map.set(key, { underbillings: 0, overbillings: 0, cyRevenue: 0, cyCosts: 0 });
+      if (!map.has(key)) map.set(key, { underbillings: 0, overbillings: 0, cyRevenue: 0, cyCosts: 0, cyBillings: 0 });
       const agg = map.get(key)!;
       const costsToDate = Number(row.costs_to_date);
       const billingsToDate = Number(row.billings_to_date);
@@ -204,21 +217,54 @@ export default function DashboardClient({
       const overUnder = earnedRevenue - billingsToDate;
       if (overUnder > 0) agg.underbillings += overUnder;
       else agg.overbillings += -overUnder;
-      agg.cyRevenue += earnedRevenue - Number(row.prior_year_earned);
-      agg.cyCosts += costsToDate - Number(row.prior_year_costs);
+      agg.cyRevenue   += earnedRevenue   - Number(row.prior_year_earned);
+      agg.cyCosts     += costsToDate     - Number(row.prior_year_costs);
+      agg.cyBillings  += billingsToDate  - Number(row.prior_year_billings);
     }
     return Array.from(map.entries())
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([period, agg]) => ({
         period,
         underbillings: Math.round(agg.underbillings),
-        overbillings: Math.round(agg.overbillings),
-        netOverUnder: Math.round(agg.underbillings - agg.overbillings),
-        cyRevenue: Math.round(agg.cyRevenue),
-        cyCosts: Math.round(agg.cyCosts),
-        cyGp: Math.round(agg.cyRevenue - agg.cyCosts),
+        overbillings:  Math.round(agg.overbillings),
+        netOverUnder:  Math.round(agg.underbillings - agg.overbillings),
+        cyRevenue:     Math.round(agg.cyRevenue),
+        cyCosts:       Math.round(agg.cyCosts),
+        cyBillings:    Math.round(agg.cyBillings),
+        cyGp:          Math.round(agg.cyRevenue - agg.cyCosts),
       }));
   }, [trendRows]);
+
+  // ── YTD new contracts (jobs first appearing in current fiscal year) ────────
+  const ytdNewContracts = useMemo(() => {
+    const fy = new Date(latestReport.period_date).getFullYear();
+    const fyStart = `${fy}-01`; // "YYYY-MM" prefix comparison
+    const priorJobIds = new Set<number>();
+    for (const row of trendRows) {
+      const period = new Date(row.period_date).toISOString().slice(0, 7);
+      if (period < fyStart) priorJobIds.add(row.job_id);
+    }
+    return latestItems
+      .filter((item) => !priorJobIds.has(item.job_id))
+      .reduce((s, item) => s + Number(item.original_contract) + Number(item.approved_cos), 0);
+  }, [trendRows, latestItems, latestReport.period_date]);
+
+  // ── Fiscal-year incremental trend points ─────────────────────────────────
+  const fyPoints = useMemo(() => {
+    const fy = new Date(latestReport.period_date).getFullYear();
+    const fyStart = `${fy}-01`;
+    const filtered = trendPoints.filter((p) => p.period >= fyStart);
+    return filtered.map((point, i) => {
+      const prev = i > 0 ? filtered[i - 1] : null;
+      return {
+        period:      point.period,
+        incrRevenue: Math.round(prev ? point.cyRevenue  - prev.cyRevenue  : point.cyRevenue),
+        incrCosts:   Math.round(prev ? point.cyCosts    - prev.cyCosts    : point.cyCosts),
+        incrGp:      Math.round(prev ? point.cyGp       - prev.cyGp       : point.cyGp),
+        cumGp:       point.cyGp,    // cumulative YTD GP as of this period
+      };
+    });
+  }, [trendPoints, latestReport.period_date]);
 
   // ── GP fade ───────────────────────────────────────────────────────────────
   const gpFade = useMemo(
@@ -488,6 +534,132 @@ export default function DashboardClient({
             </div>
           </div>
         )}
+
+        {/* ── YTD Statistics ─────────────────────────────────────────────── */}
+        <div className="bg-white border border-[#E5E7EB] rounded-lg shadow-sm p-5">
+          <div className="mb-5">
+            <h2 className="text-sm font-semibold text-[#1B2A4A]">Year-to-Date Statistics</h2>
+            <p className="text-xs text-[#6B7280] mt-0.5">
+              Fiscal year {new Date(latestReport.period_date).getFullYear()} · through {toDateStr(latestReport.period_date)}
+            </p>
+          </div>
+
+          {/* 6 YTD summary cards */}
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
+            <SummaryCard label="YTD Revenue" value={`$${fmtInt(totalCyRevenue)}`} />
+            <SummaryCard label="YTD Costs" value={`$${fmtInt(totalCyCosts)}`} />
+            <SummaryCard
+              label="YTD Gross Profit"
+              value={`$${fmtInt(totalCyGp)}`}
+              valueColor={totalCyGp >= 0 ? "text-[#16A34A]" : "text-[#B22234]"}
+            />
+            <SummaryCard
+              label="YTD GP%"
+              value={(ytdGpPct * 100).toFixed(1) + "%"}
+              valueColor={ytdGpPct >= 0.1 ? "text-[#16A34A]" : ytdGpPct > 0 ? "text-[#D97706]" : "text-[#B22234]"}
+            />
+            <SummaryCard label="YTD Billings" value={`$${fmtInt(totalCyBillings)}`} />
+            <SummaryCard label="YTD New Contracts" value={`$${fmtInt(ytdNewContracts)}`} />
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* YTD trend chart — incremental bars + cumulative GP line */}
+            {fyPoints.length >= 1 && (
+              <div>
+                <p className="text-xs font-medium text-[#6B7280] mb-3">
+                  YTD Revenue, Costs &amp; Cumulative GP
+                </p>
+                <ResponsiveContainer width="100%" height={220}>
+                  <ComposedChart data={fyPoints} margin={{ top: 4, right: 8, left: 8, bottom: 4 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                    <XAxis dataKey="period" tick={{ fontSize: 9, fill: "#6B7280" }} />
+                    <YAxis tickFormatter={fmtAxis} tick={{ fontSize: 9, fill: "#6B7280" }} width={56} />
+                    <Tooltip formatter={tooltipFmt} />
+                    <Legend wrapperStyle={{ fontSize: 9 }} />
+                    <Bar dataKey="incrRevenue" name="Revenue" fill="#1B2A4A" radius={[2, 2, 0, 0]} />
+                    <Bar dataKey="incrCosts"   name="Costs"   fill="#9CA3AF" radius={[2, 2, 0, 0]} />
+                    <Line
+                      type="monotone"
+                      dataKey="cumGp"
+                      name="Cumul. GP"
+                      stroke="#16A34A"
+                      strokeWidth={2}
+                      dot
+                    />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+
+            {/* YTD vs Prior Year comparison table */}
+            <div>
+              <p className="text-xs font-medium text-[#6B7280] mb-3">YTD vs Prior Year</p>
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="bg-[#1B2A4A] text-white text-left">
+                    <th className="px-3 py-2 font-semibold">Metric</th>
+                    <th className="px-3 py-2 text-right font-semibold whitespace-nowrap">
+                      YTD {new Date(latestReport.period_date).getFullYear()}
+                    </th>
+                    <th className="px-3 py-2 text-right font-semibold whitespace-nowrap">
+                      Prior Year
+                    </th>
+                    <th className="px-3 py-2 text-right font-semibold">Change</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[
+                    {
+                      label: "Revenue",
+                      ytd: totalCyRevenue,
+                      py: priorYearRevenue,
+                      fmt: (v: number) => `$${fmtInt(v)}`,
+                    },
+                    {
+                      label: "Costs",
+                      ytd: totalCyCosts,
+                      py: priorYearCosts,
+                      fmt: (v: number) => `$${fmtInt(v)}`,
+                    },
+                    {
+                      label: "Gross Profit",
+                      ytd: totalCyGp,
+                      py: priorYearGp,
+                      fmt: (v: number) => `$${fmtInt(v)}`,
+                    },
+                    {
+                      label: "GP%",
+                      ytd: ytdGpPct * 100,
+                      py: priorYearGpPct * 100,
+                      fmt: (v: number) => v.toFixed(1) + "%",
+                    },
+                    {
+                      label: "Billings",
+                      ytd: totalCyBillings,
+                      py: priorYearBillings,
+                      fmt: (v: number) => `$${fmtInt(v)}`,
+                    },
+                  ].map(({ label, ytd, py, fmt }, i) => {
+                    const delta = ytd - py;
+                    const deltaColor =
+                      delta > 0 ? "text-[#16A34A]" : delta < 0 ? "text-[#B22234]" : "text-[#6B7280]";
+                    return (
+                      <tr key={label} className={i % 2 === 0 ? "bg-white" : "bg-[#F9FAFB]"}>
+                        <td className="px-3 py-2 text-[#374151]">{label}</td>
+                        <td className="px-3 py-2 text-right font-mono">{fmt(ytd)}</td>
+                        <td className="px-3 py-2 text-right font-mono text-[#6B7280]">{fmt(py)}</td>
+                        <td className={`px-3 py-2 text-right font-mono font-semibold ${deltaColor}`}>
+                          {delta >= 0 ? "+" : ""}
+                          {fmt(delta)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
 
         {/* GP fade table */}
         <div className="bg-white border border-[#E5E7EB] rounded-lg shadow-sm p-5">

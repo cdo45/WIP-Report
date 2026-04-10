@@ -29,6 +29,7 @@ export interface DashLineItem {
 
 export interface TrendRow {
   report_id: number;
+  job_id: number;
   period_date: string;
   revised_contract: number;
   est_total_cost: number;
@@ -36,6 +37,7 @@ export interface TrendRow {
   billings_to_date: number;
   pm_pct_override: number | null;
   prior_year_earned: number;
+  prior_year_billings: number;
   prior_year_costs: number;
 }
 
@@ -76,11 +78,12 @@ export default async function DashboardPage() {
       trendRows = (await sql`
         SELECT
           wli.report_id,
+          wli.job_id,
           wr.period_date,
           wli.revised_contract, wli.est_total_cost,
           wli.costs_to_date, wli.billings_to_date,
           wli.pm_pct_override,
-          wli.prior_year_earned, wli.prior_year_costs
+          wli.prior_year_earned, wli.prior_year_billings, wli.prior_year_costs
         FROM wip_line_items wli
         JOIN wip_reports wr ON wr.id = wli.report_id
         WHERE wr.status = 'final'
