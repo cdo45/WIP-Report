@@ -227,11 +227,12 @@ export default function WipEditor({
 
   // Add Job modal state
   interface AvailableJob { id: number; job_number: string; job_name: string; status: string; }
-  const [addJobOpen, setAddJobOpen]         = useState(false);
-  const [availableJobs, setAvailableJobs]   = useState<AvailableJob[]>([]);
-  const [jobFilter, setJobFilter]           = useState("");
-  const [addingJobId, setAddingJobId]       = useState<number | null>(null);
-  const [addJobError, setAddJobError]       = useState<string | null>(null);
+  const [addJobOpen, setAddJobOpen]           = useState(false);
+  const [availableJobs, setAvailableJobs]     = useState<AvailableJob[]>([]);
+  const [jobFilter, setJobFilter]             = useState("");
+  const [selectedToAdd, setSelectedToAdd]     = useState<Set<number>>(new Set());
+  const [addingJobs, setAddingJobs]           = useState(false);
+  const [addJobError, setAddJobError]         = useState<string | null>(null);
 
   const isEditable = !isFinalized || editingFinalized;
 
@@ -467,16 +468,15 @@ export default function WipEditor({
   async function handleOpenAddJob() {
     setAddJobError(null);
     setJobFilter("");
+    setSelectedToAdd(new Set());
     setAddJobOpen(true);
     try {
       const res  = await fetch("/api/jobs");
       const data = await res.json();
-      // Filter to active jobs not already in this report
       const existingIds = new Set(sortedItems.map((i) => i.job_id));
       const available   = (data as AvailableJob[]).filter(
         (j) => j.status === "Active" && !existingIds.has(j.id)
       );
-      // Sort by job_number
       available.sort((a, b) =>
         a.job_number.localeCompare(b.job_number, undefined, { numeric: true })
       );
@@ -486,50 +486,73 @@ export default function WipEditor({
     }
   }
 
-  async function handleAddJob(jobId: number) {
-    setAddingJobId(jobId);
-    setAddJobError(null);
-    try {
-      const res = await fetch(`/api/wip-reports/${report.id}/line-items`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ job_id: jobId }),
-      });
-      if (!res.ok) {
-        const d = await res.json().catch(() => ({}));
-        setAddJobError(d.error ?? "Failed to add job.");
-        return;
-      }
-      const newItem = await res.json() as LineItemWithJob;
+  function toggleJobSelection(jobId: number) {
+    setSelectedToAdd((prev) => {
+      const next = new Set(prev);
+      if (next.has(jobId)) next.delete(jobId); else next.add(jobId);
+      return next;
+    });
+  }
 
-      // Append to items list and initialize editable state
-      setSortedItems((prev) => [...prev, newItem]);
+  async function handleAddJobs() {
+    if (selectedToAdd.size === 0) return;
+    setAddingJobs(true);
+    setAddJobError(null);
+    const addedItems: LineItemWithJob[] = [];
+    const failedNums: string[] = [];
+
+    for (const jobId of Array.from(selectedToAdd)) {
+      try {
+        const res = await fetch(`/api/wip-reports/${report.id}/line-items`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ job_id: jobId }),
+        });
+        if (!res.ok) {
+          const d = await res.json().catch(() => ({}));
+          const label = availableJobs.find((j) => j.id === jobId)?.job_number ?? String(jobId);
+          failedNums.push(`${label}: ${d.error ?? "error"}`);
+          continue;
+        }
+        addedItems.push(await res.json() as LineItemWithJob);
+      } catch {
+        const label = availableJobs.find((j) => j.id === jobId)?.job_number ?? String(jobId);
+        failedNums.push(`${label}: network error`);
+      }
+    }
+
+    if (addedItems.length > 0) {
+      setSortedItems((prev) => [...prev, ...addedItems]);
       setEditState((prev) => {
         const next = new Map(prev);
-        next.set(newItem.id, {
-          revised_contract:    formatDollarInput(String(newItem.revised_contract   ?? 0)),
-          est_total_cost:      formatDollarInput(String(newItem.est_total_cost     ?? 0)),
-          costs_to_date:       formatDollarInput(String(newItem.costs_to_date      ?? 0)),
-          billings_to_date:    formatDollarInput(String(newItem.billings_to_date   ?? 0)),
-          cp_costs:            formatDollarInput(String(newItem.cp_costs           ?? 0)),
-          cp_billings:         formatDollarInput(String(newItem.cp_billings        ?? 0)),
-          pm_pct_override:     newItem.pm_pct_override != null ? String(newItem.pm_pct_override) : "",
-          prior_year_earned:   formatDollarInput(String(newItem.prior_year_earned  ?? 0)),
-          prior_year_billings: formatDollarInput(String(newItem.prior_year_billings ?? 0)),
-          prior_year_costs:    formatDollarInput(String(newItem.prior_year_costs   ?? 0)),
-          notes:               newItem.notes ?? "",
-        });
+        for (const newItem of addedItems) {
+          next.set(newItem.id, {
+            revised_contract:    formatDollarInput(String(newItem.revised_contract    ?? 0)),
+            est_total_cost:      formatDollarInput(String(newItem.est_total_cost      ?? 0)),
+            costs_to_date:       formatDollarInput(String(newItem.costs_to_date       ?? 0)),
+            billings_to_date:    formatDollarInput(String(newItem.billings_to_date    ?? 0)),
+            cp_costs:            formatDollarInput(String(newItem.cp_costs            ?? 0)),
+            cp_billings:         formatDollarInput(String(newItem.cp_billings         ?? 0)),
+            pm_pct_override:     newItem.pm_pct_override != null ? String(newItem.pm_pct_override) : "",
+            prior_year_earned:   formatDollarInput(String(newItem.prior_year_earned   ?? 0)),
+            prior_year_billings: formatDollarInput(String(newItem.prior_year_billings ?? 0)),
+            prior_year_costs:    formatDollarInput(String(newItem.prior_year_costs    ?? 0)),
+            notes:               newItem.notes ?? "",
+          });
+        }
         return next;
       });
-
-      // Remove from available list
-      setAvailableJobs((prev) => prev.filter((j) => j.id !== jobId));
-      setAddJobOpen(false);
-    } catch {
-      setAddJobError("Failed to add job.");
-    } finally {
-      setAddingJobId(null);
+      const addedIds = new Set(addedItems.map((i) => i.job_id));
+      setAvailableJobs((prev) => prev.filter((j) => !addedIds.has(j.id)));
+      setSelectedToAdd(new Set());
     }
+
+    if (failedNums.length > 0) {
+      setAddJobError(`Failed to add: ${failedNums.join(", ")}`);
+    } else {
+      setAddJobOpen(false);
+    }
+    setAddingJobs(false);
   }
 
   // Auto-enter edit mode when navigated with ?edit=1
@@ -1689,74 +1712,105 @@ ${fadedJobs.length > 0 ? `
       </div>
 
       {/* ── Add Job Modal ───────────────────────────────────────────────── */}
-      {addJobOpen && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
-          <div className="bg-white border border-[#E5E7EB] rounded-lg w-full max-w-md p-6 shadow-lg">
-            <h2 className="text-lg font-bold text-[#1A1A1A] mb-4">Add Job to Report</h2>
+      {addJobOpen && (() => {
+        const filter   = jobFilter.toLowerCase().trim();
+        const filtered = availableJobs.filter(
+          (j) => !filter || j.job_number.toLowerCase().includes(filter) || j.job_name.toLowerCase().includes(filter)
+        );
+        return (
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
+            <div className="bg-white border border-[#E5E7EB] rounded-lg w-full max-w-md p-6 shadow-lg flex flex-col" style={{ maxHeight: "90vh" }}>
+              <h2 className="text-lg font-bold text-[#1A1A1A] mb-4 shrink-0">Add Jobs to Report</h2>
 
-            {addJobError && (
-              <div className="mb-3 bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded text-sm">
-                {addJobError}
-              </div>
-            )}
+              {addJobError && (
+                <div className="mb-3 bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded text-sm shrink-0">
+                  {addJobError}
+                </div>
+              )}
 
-            <input
-              type="text"
-              placeholder="Search by job # or name…"
-              value={jobFilter}
-              onChange={(e) => setJobFilter(e.target.value)}
-              className="w-full border border-[#E5E7EB] rounded px-3 py-2 text-sm text-[#1A1A1A] focus:outline-none focus:border-[#1B2A4A] mb-3"
-              autoFocus
-            />
-
-            <div className="max-h-64 overflow-y-auto border border-[#E5E7EB] rounded mb-4">
-              {availableJobs.length === 0 ? (
-                <p className="text-[#6B7280] text-sm px-3 py-4 text-center">
-                  {addJobError ? "" : "All active jobs are already in this report."}
-                </p>
-              ) : (() => {
-                const filter = jobFilter.toLowerCase().trim();
-                const filtered = availableJobs.filter(
-                  (j) =>
-                    !filter ||
-                    j.job_number.toLowerCase().includes(filter) ||
-                    j.job_name.toLowerCase().includes(filter)
-                );
-                if (filtered.length === 0) {
-                  return (
-                    <p className="text-[#6B7280] text-sm px-3 py-4 text-center">No matching jobs.</p>
-                  );
-                }
-                return filtered.map((job) => (
-                  <div
-                    key={job.id}
-                    className="flex items-center justify-between px-3 py-2.5 hover:bg-[#F9FAFB] border-b border-[#E5E7EB] last:border-b-0"
-                  >
-                    <div className="min-w-0 flex-1 mr-3">
-                      <span className="font-mono text-xs text-[#6B7280] mr-2">{job.job_number}</span>
-                      <span className="text-sm text-[#1A1A1A] truncate">{job.job_name}</span>
-                    </div>
+              {/* Search + bulk actions */}
+              <div className="shrink-0 mb-2">
+                <input
+                  type="text"
+                  placeholder="Search by job # or name…"
+                  value={jobFilter}
+                  onChange={(e) => setJobFilter(e.target.value)}
+                  className="w-full border border-[#E5E7EB] rounded px-3 py-2 text-sm text-[#1A1A1A] focus:outline-none focus:border-[#1B2A4A]"
+                  autoFocus
+                />
+                {availableJobs.length > 0 && (
+                  <div className="flex gap-3 mt-1.5 text-xs">
                     <button
-                      onClick={() => handleAddJob(job.id)}
-                      disabled={addingJobId === job.id}
-                      className="shrink-0 bg-[#1B2A4A] hover:bg-[#243d70] disabled:opacity-50 text-white text-xs font-semibold px-3 py-1 rounded transition-colors"
+                      onClick={() => setSelectedToAdd(new Set(filtered.map((j) => j.id)))}
+                      className="text-[#1B2A4A] hover:underline"
                     >
-                      {addingJobId === job.id ? "Adding…" : "Add"}
+                      Select all{filter ? " matching" : ""}
                     </button>
+                    <button
+                      onClick={() => setSelectedToAdd(new Set())}
+                      className="text-[#6B7280] hover:underline"
+                    >
+                      Clear
+                    </button>
+                    {selectedToAdd.size > 0 && (
+                      <span className="text-[#6B7280]">{selectedToAdd.size} selected</span>
+                    )}
                   </div>
-                ));
-              })()}
-            </div>
+                )}
+              </div>
 
-            <button
-              onClick={() => setAddJobOpen(false)}
-              className="border border-[#E5E7EB] text-[#6B7280] hover:border-[#1B2A4A] hover:text-[#1B2A4A] px-4 py-2 rounded text-sm transition-colors"
-            >
-              Close
-            </button>
+              {/* Checklist */}
+              <div className="flex-1 overflow-y-auto border border-[#E5E7EB] rounded mb-4 min-h-0">
+                {availableJobs.length === 0 ? (
+                  <p className="text-[#6B7280] text-sm px-3 py-4 text-center">
+                    All active jobs are already in this report.
+                  </p>
+                ) : filtered.length === 0 ? (
+                  <p className="text-[#6B7280] text-sm px-3 py-4 text-center">No matching jobs.</p>
+                ) : (
+                  filtered.map((job) => (
+                    <label
+                      key={job.id}
+                      className="flex items-center gap-3 px-3 py-2.5 hover:bg-[#F9FAFB] border-b border-[#E5E7EB] last:border-b-0 cursor-pointer"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedToAdd.has(job.id)}
+                        onChange={() => toggleJobSelection(job.id)}
+                        className="accent-[#1B2A4A] shrink-0"
+                      />
+                      <span className="font-mono text-xs text-[#6B7280] shrink-0 w-14">{job.job_number}</span>
+                      <span className="text-sm text-[#1A1A1A] truncate">{job.job_name}</span>
+                    </label>
+                  ))
+                )}
+              </div>
+
+              {/* Footer buttons */}
+              <div className="flex gap-3 shrink-0">
+                <button
+                  onClick={handleAddJobs}
+                  disabled={selectedToAdd.size === 0 || addingJobs}
+                  className="bg-[#1B2A4A] hover:bg-[#243d70] disabled:opacity-40 text-white font-bold px-5 py-2 rounded text-sm transition-colors"
+                >
+                  {addingJobs
+                    ? "Adding…"
+                    : selectedToAdd.size === 0
+                    ? "Add Jobs"
+                    : `Add ${selectedToAdd.size} Job${selectedToAdd.size !== 1 ? "s" : ""}`}
+                </button>
+                <button
+                  onClick={() => setAddJobOpen(false)}
+                  disabled={addingJobs}
+                  className="border border-[#E5E7EB] text-[#6B7280] hover:border-[#1B2A4A] hover:text-[#1B2A4A] disabled:opacity-40 px-4 py-2 rounded text-sm transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }
