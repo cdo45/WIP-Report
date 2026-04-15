@@ -178,13 +178,12 @@ export default function WipEditor({
   const router = useRouter();
   const isFinalized = report.status === "final";
 
-  // Keep a stable copy of initialLineItems for Map keying and computed.
-  // Render order is determined solely by sortedForRender below.
-  const sortedItems = [...initialLineItems];
+  // sortedItems is the authoritative list; updated when jobs are added dynamically.
+  const [sortedItems, setSortedItems] = useState<LineItemWithJob[]>(initialLineItems);
 
   const [editState, setEditState] = useState<Map<number, Editable>>(() => {
     const m = new Map<number, Editable>();
-    for (const item of sortedItems) {
+    for (const item of initialLineItems) {
       m.set(item.id, {
         revised_contract:   formatDollarInput(String(item.revised_contract ?? 0)),
         est_total_cost:     formatDollarInput(String(item.est_total_cost ?? 0)),
@@ -225,6 +224,14 @@ export default function WipEditor({
   const [snapshotsLoaded, setSnapshotsLoaded] = useState(false);
   const [snapshotsExpanded, setSnapshotsExpanded] = useState(false);
   const hasAutoEdited = useRef(false);
+
+  // Add Job modal state
+  interface AvailableJob { id: number; job_number: string; job_name: string; status: string; }
+  const [addJobOpen, setAddJobOpen]         = useState(false);
+  const [availableJobs, setAvailableJobs]   = useState<AvailableJob[]>([]);
+  const [jobFilter, setJobFilter]           = useState("");
+  const [addingJobId, setAddingJobId]       = useState<number | null>(null);
+  const [addJobError, setAddJobError]       = useState<string | null>(null);
 
   const isEditable = !isFinalized || editingFinalized;
 
@@ -454,6 +461,74 @@ export default function WipEditor({
       }
     } catch {
       alert("Failed to restore snapshot.");
+    }
+  }
+
+  async function handleOpenAddJob() {
+    setAddJobError(null);
+    setJobFilter("");
+    setAddJobOpen(true);
+    try {
+      const res  = await fetch("/api/jobs");
+      const data = await res.json();
+      // Filter to active jobs not already in this report
+      const existingIds = new Set(sortedItems.map((i) => i.job_id));
+      const available   = (data as AvailableJob[]).filter(
+        (j) => j.status === "Active" && !existingIds.has(j.id)
+      );
+      // Sort by job_number
+      available.sort((a, b) =>
+        a.job_number.localeCompare(b.job_number, undefined, { numeric: true })
+      );
+      setAvailableJobs(available);
+    } catch {
+      setAddJobError("Failed to load jobs.");
+    }
+  }
+
+  async function handleAddJob(jobId: number) {
+    setAddingJobId(jobId);
+    setAddJobError(null);
+    try {
+      const res = await fetch(`/api/wip-reports/${report.id}/line-items`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ job_id: jobId }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        setAddJobError(d.error ?? "Failed to add job.");
+        return;
+      }
+      const newItem = await res.json() as LineItemWithJob;
+
+      // Append to items list and initialize editable state
+      setSortedItems((prev) => [...prev, newItem]);
+      setEditState((prev) => {
+        const next = new Map(prev);
+        next.set(newItem.id, {
+          revised_contract:    formatDollarInput(String(newItem.revised_contract   ?? 0)),
+          est_total_cost:      formatDollarInput(String(newItem.est_total_cost     ?? 0)),
+          costs_to_date:       formatDollarInput(String(newItem.costs_to_date      ?? 0)),
+          billings_to_date:    formatDollarInput(String(newItem.billings_to_date   ?? 0)),
+          cp_costs:            formatDollarInput(String(newItem.cp_costs           ?? 0)),
+          cp_billings:         formatDollarInput(String(newItem.cp_billings        ?? 0)),
+          pm_pct_override:     newItem.pm_pct_override != null ? String(newItem.pm_pct_override) : "",
+          prior_year_earned:   formatDollarInput(String(newItem.prior_year_earned  ?? 0)),
+          prior_year_billings: formatDollarInput(String(newItem.prior_year_billings ?? 0)),
+          prior_year_costs:    formatDollarInput(String(newItem.prior_year_costs   ?? 0)),
+          notes:               newItem.notes ?? "",
+        });
+        return next;
+      });
+
+      // Remove from available list
+      setAvailableJobs((prev) => prev.filter((j) => j.id !== jobId));
+      setAddJobOpen(false);
+    } catch {
+      setAddJobError("Failed to add job.");
+    } finally {
+      setAddingJobId(null);
     }
   }
 
@@ -899,6 +974,14 @@ ${fadedJobs.length > 0 ? `
                   {reFinalizing ? "Saving…" : "Save & Re-finalize"}
                 </button>
               </>
+            )}
+            {isEditable && (
+              <button
+                onClick={handleOpenAddJob}
+                className="border border-[#1B2A4A] text-[#1B2A4A] hover:bg-[#1B2A4A]/10 px-4 py-2 rounded text-sm font-medium transition-colors"
+              >
+                + Add Job
+              </button>
             )}
             {!isFinalized && (
               <button
@@ -1604,6 +1687,76 @@ ${fadedJobs.length > 0 ? `
           </div>
         )}
       </div>
+
+      {/* ── Add Job Modal ───────────────────────────────────────────────── */}
+      {addJobOpen && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
+          <div className="bg-white border border-[#E5E7EB] rounded-lg w-full max-w-md p-6 shadow-lg">
+            <h2 className="text-lg font-bold text-[#1A1A1A] mb-4">Add Job to Report</h2>
+
+            {addJobError && (
+              <div className="mb-3 bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded text-sm">
+                {addJobError}
+              </div>
+            )}
+
+            <input
+              type="text"
+              placeholder="Search by job # or name…"
+              value={jobFilter}
+              onChange={(e) => setJobFilter(e.target.value)}
+              className="w-full border border-[#E5E7EB] rounded px-3 py-2 text-sm text-[#1A1A1A] focus:outline-none focus:border-[#1B2A4A] mb-3"
+              autoFocus
+            />
+
+            <div className="max-h-64 overflow-y-auto border border-[#E5E7EB] rounded mb-4">
+              {availableJobs.length === 0 ? (
+                <p className="text-[#6B7280] text-sm px-3 py-4 text-center">
+                  {addJobError ? "" : "All active jobs are already in this report."}
+                </p>
+              ) : (() => {
+                const filter = jobFilter.toLowerCase().trim();
+                const filtered = availableJobs.filter(
+                  (j) =>
+                    !filter ||
+                    j.job_number.toLowerCase().includes(filter) ||
+                    j.job_name.toLowerCase().includes(filter)
+                );
+                if (filtered.length === 0) {
+                  return (
+                    <p className="text-[#6B7280] text-sm px-3 py-4 text-center">No matching jobs.</p>
+                  );
+                }
+                return filtered.map((job) => (
+                  <div
+                    key={job.id}
+                    className="flex items-center justify-between px-3 py-2.5 hover:bg-[#F9FAFB] border-b border-[#E5E7EB] last:border-b-0"
+                  >
+                    <div className="min-w-0 flex-1 mr-3">
+                      <span className="font-mono text-xs text-[#6B7280] mr-2">{job.job_number}</span>
+                      <span className="text-sm text-[#1A1A1A] truncate">{job.job_name}</span>
+                    </div>
+                    <button
+                      onClick={() => handleAddJob(job.id)}
+                      disabled={addingJobId === job.id}
+                      className="shrink-0 bg-[#1B2A4A] hover:bg-[#243d70] disabled:opacity-50 text-white text-xs font-semibold px-3 py-1 rounded transition-colors"
+                    >
+                      {addingJobId === job.id ? "Adding…" : "Add"}
+                    </button>
+                  </div>
+                ));
+              })()}
+            </div>
+
+            <button
+              onClick={() => setAddJobOpen(false)}
+              className="border border-[#E5E7EB] text-[#6B7280] hover:border-[#1B2A4A] hover:text-[#1B2A4A] px-4 py-2 rounded text-sm transition-colors"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
